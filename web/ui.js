@@ -33,6 +33,14 @@ export const query = (o) =>
     Object.entries(o).filter(([, v]) => v !== "" && v !== undefined),
   ).toString();
 export const unique = (a) => [...new Set(a.filter(Boolean))];
+// Older imports predate paper.subject; their titles identify the exam subject.
+export const paperSubject = (paper) =>
+  paper.subject ||
+  (paper.title.includes("行测")
+    ? "行测"
+    : paper.title.includes("申论")
+      ? "申论"
+      : "计算机专业");
 export const options = (list, value = "", all = "全部") =>
   `<option value="">${esc(all)}</option>` +
   list
@@ -68,7 +76,7 @@ export function handle(fn) {
   };
 }
 export function heading(kicker, title, description, action = "") {
-  return `<div class="page-heading"><div><div class="eyebrow">${esc(kicker)}</div><h1>${esc(title)}</h1><p>${esc(description)}</p></div>${action}</div>`;
+  return `<div class="page-heading"><div><h1>${esc(title)}</h1><p>${esc(description)}</p></div>${action}</div>`;
 }
 export function sourceLink(q) {
   if (q.source_page > 0)
@@ -77,9 +85,16 @@ export function sourceLink(q) {
     return `<a class="text-link" href="${esc(q.source_url)}" target="_blank" rel="noopener">查看来源 ↗</a>`;
   return "";
 }
+let starting = false;
 export async function startPractice(data) {
-  const s = await api("/api/session", data);
-  location.hash = `practice/${s.id}`;
+  if (starting) return;
+  starting = true;
+  try {
+    const s = await api("/api/session", data);
+    location.hash = `practice/${s.id}`;
+  } finally {
+    starting = false;
+  }
 }
 export function modal(html) {
   const d = $("#dialog");

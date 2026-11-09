@@ -14,7 +14,7 @@ import {
 } from "./ui.js";
 function chart(data) {
   if (!data.some((d) => d.count))
-    return '<div class="empty chart-empty"><div class="empty-glyph">↗</div><h3>让第一道题，开启你的趋势。</h3><p>开始练习后，这里会显示每日刷题量和正确率。</p></div>';
+    return '<div class="empty chart-empty"><h3>还没有作答趋势</h3><p>完成练习后，在这里查看每日作答量与正确率。</p><a class="button primary" href="#library">选择题目开始练习</a></div>';
   const w = Math.max(760, data.length * 40),
     h = 260,
     left = 45,
@@ -77,8 +77,8 @@ export async function renderStats(root, meta) {
   root.innerHTML =
     heading(
       "LEARNING ANALYTICS",
-      "作答数据统计",
-      "看清进步的轨迹，也看见值得再练一次的地方。",
+      "学习统计",
+      "按时间与科目查看作答表现，找到下一步的练习重点。",
     ) +
     `<section class="card filter-bar" id="stats-filters"><label>时间周期<select name="days"><option value="7">近7天</option><option value="30">近30天</option><option value="90">近90天</option><option value="0">全部时间</option></select></label><label>作答口径<select name="attempt"><option value="">全部作答</option><option value="first">仅首次作答</option></select></label><label>练习方式<select name="mode"><option value="">全部方式</option><option value="practice">模块练习</option><option value="review">错题复习</option><option value="exam">整卷练习</option></select></label><label>模块<select name="module">${options(unique(meta.facets.map((f) => f.module)))}</select></label><label>小类<select name="category"></select></label><label>考点<select name="topic"></select></label><label>标签<select name="tag">${options(meta.tags)}</select></label></section><div id="stats-content"></div><p class="caption">统计按北京时间归日；正确率 = 答对次数 / 已判分次数。首次作答指该题在本地的第一次提交；多标签分组之间可能重复计数。</p>`;
   function facets() {
@@ -114,7 +114,7 @@ export async function renderStats(root, meta) {
     ]
       .map(
         ([k, t]) =>
-          `<th><button data-sort="${k}">${t} ${sort === k ? (desc ? "↓" : "↑") : "↕"}</button></th>`,
+          `<th aria-sort="${sort === k ? (desc ? "descending" : "ascending") : "none"}"><button data-sort="${k}">${t} ${sort === k ? (desc ? "↓" : "↑") : "↕"}</button></th>`,
       )
       .join(
         "",
@@ -142,7 +142,7 @@ export async function renderStats(root, meta) {
       ]
         .map(
           ([v, t]) =>
-            `<button data-group="${v}" class="${state.group === v ? "selected" : ""}">${t}</button>`,
+            `<button data-group="${v}" aria-pressed="${state.group === v}" class="${state.group === v ? "selected" : ""}">${t}</button>`,
         )
         .join(
           "",

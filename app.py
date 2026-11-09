@@ -1,14 +1,18 @@
 """Local-only web application. Python standard library; no cloud services required."""
 from http.server import ThreadingHTTPServer,BaseHTTPRequestHandler
 from urllib.parse import urlparse,parse_qs,unquote
-import json,mimetypes,traceback,argparse,sqlite3,tempfile,os
+import json,mimetypes,traceback,argparse,sqlite3,tempfile,os,gzip,time
 from pathlib import Path
 from contextlib import closing
 import database,services,importer
 ROOT=Path(__file__).resolve().parent
 class Handler(BaseHTTPRequestHandler):
     def send(self,data,status=200,ctype='application/json; charset=utf-8',headers=None):
-        body=json.dumps(data,ensure_ascii=False).encode() if ctype.startswith('application/json') else data
+        body=json.dumps(data,ensure_ascii=False,separators=(',',':')).encode() if ctype.startswith('application/json') else data
+        headers=dict(headers or {})
+        if ctype.startswith('application/json') and len(body)>1024 and 'gzip' in {part.strip() for part in self.headers.get('Accept-Encoding','').split(',')}:
+            body=gzip.compress(body,compresslevel=1)
+            headers.update({'Content-Encoding':'gzip','Vary':'Accept-Encoding'})
         self.send_response(status); self.send_header('Content-Type',ctype); self.send_header('Content-Length',str(len(body)))
         self.send_header('X-Content-Type-Options','nosniff'); self.send_header('Cache-Control','no-store')
         for k,v in (headers or {}).items(): self.send_header(k,v)
@@ -27,10 +31,12 @@ class Handler(BaseHTTPRequestHandler):
         if not self.authorized():return self.send({'error':'仅允许本地应用访问'},403)
         url=urlparse(self.path); path=url.path; filters={k:v[-1] for k,v in parse_qs(url.query).items()}
         try:
-            if path=='/api/meta':return self.send(services.metadata())
+            if path=='/api/meta':
+                started=time.perf_counter(); meta=services.metadata()
+                return self.send(meta,headers={'Server-Timing':f'meta;dur={(time.perf_counter()-started)*1000:.1f}'})
             if path=='/api/questions':return self.send(services.list_questions(filters))
             if path.startswith('/api/question/'):
-                return self.send(services.get_question(unquote(path.split('/')[-1]),filters.get('answer')=='1'))
+                return self.send(services.get_question(unquote(path.split('/')[-1]),filters.get('answer')=='1',filters.get('compact')!='1'))
             if path.startswith('/api/session/'):return self.send(services.get_session(path.split('/')[-1]))
             if path=='/api/stats':return self.send(services.statistics(filters))
             if path=='/api/backup':
@@ -65,7 +71,9 @@ class Handler(BaseHTTPRequestHandler):
             if path=='/api/session':result=services.create_session(body)
             elif path.startswith('/api/session/'):
                 parts=path.strip('/').split('/'); sid=parts[2]
-                result=services.answer(sid,body) if len(parts)==4 and parts[3]=='answer' else services.update_session(sid,body)
+                if len(parts)==4 and parts[3]=='answer': result=services.answer(sid,body)
+                elif len(parts)==4 and parts[3]=='finish': result=services.finish_session(sid,body)
+                else: result=services.update_session(sid,body)
             elif path.startswith('/api/mark/'):result=services.mark(unquote(path.split('/')[-1]),body)
             elif path.startswith('/api/edit/'):result=importer.edit_question(unquote(path.split('/')[-1]),body)
             elif path=='/api/import':result=importer.import_data(body['data'],body.get('preview',False))

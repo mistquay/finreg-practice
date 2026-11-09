@@ -8,9 +8,13 @@ PRAGMA journal_mode=WAL;
 CREATE TABLE IF NOT EXISTS papers(id TEXT PRIMARY KEY,title TEXT NOT NULL,year INTEGER,source TEXT,sha256 TEXT,duration_minutes INTEGER DEFAULT 120);
 CREATE TABLE IF NOT EXISTS questions(id TEXT PRIMARY KEY,paper_id TEXT REFERENCES papers(id),number INTEGER,year INTEGER,stem TEXT NOT NULL,options TEXT NOT NULL,answer TEXT NOT NULL,explanation TEXT,material TEXT,type TEXT,module TEXT,category TEXT,topic TEXT,tags TEXT,source TEXT,source_page INTEGER,source_url TEXT,quality TEXT,issues TEXT,provider TEXT,external_id TEXT,difficulty REAL,raw TEXT,edited INTEGER NOT NULL DEFAULT 0);
 CREATE INDEX IF NOT EXISTS questions_scope ON questions(module,category,paper_id);
+CREATE INDEX IF NOT EXISTS questions_paper_quality ON questions(paper_id,quality);
+CREATE INDEX IF NOT EXISTS questions_facets ON questions(module,category,topic,quality);
+CREATE INDEX IF NOT EXISTS questions_tags ON questions(tags);
 CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY,created_at TEXT NOT NULL,mode TEXT NOT NULL,title TEXT,question_ids TEXT NOT NULL,status TEXT DEFAULT 'active',position INTEGER DEFAULT 0,drafts TEXT DEFAULT '{}');
 CREATE TABLE IF NOT EXISTS attempts(id INTEGER PRIMARY KEY AUTOINCREMENT,question_id TEXT NOT NULL REFERENCES questions(id),session_id TEXT REFERENCES sessions(id),selected TEXT NOT NULL,correct INTEGER,elapsed_ms INTEGER NOT NULL,created_at TEXT NOT NULL,is_first INTEGER NOT NULL,mode TEXT NOT NULL,answer_snapshot TEXT NOT NULL,UNIQUE(session_id,question_id));
 CREATE INDEX IF NOT EXISTS attempts_date ON attempts(created_at);
+CREATE INDEX IF NOT EXISTS attempts_question ON attempts(question_id,id DESC);
 CREATE TABLE IF NOT EXISTS imported_documents(sha256 TEXT PRIMARY KEY,created_at TEXT NOT NULL,payload TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS marks(question_id TEXT PRIMARY KEY REFERENCES questions(id),favorite INTEGER DEFAULT 0,note TEXT DEFAULT '');
 '''

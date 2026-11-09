@@ -3,6 +3,6 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "node --check web/app.js && node --check web/practice.js && node --check web/library.js && node --check web/stats.js && node --check web/data.js && node --check web/ui.js"
+    "check": "node --check web/app.js && node --check web/practice.js && node --check web/library.js && node --check web/stats.js && node --check web/data.js && node --check web/ui.js && node --check web/home.js && node --check web/icons.js && node --check web/session-sync.js"
   }
 }

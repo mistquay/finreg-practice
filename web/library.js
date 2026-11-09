@@ -13,11 +13,12 @@ import {
   toast,
   startPractice,
   handle,
+  paperSubject,
 } from "./ui.js";
 export async function questionDetail(id) {
   const q = await api("/api/question/" + encodeURIComponent(id) + "?answer=1");
   const d = modal(
-    `<div class="eyebrow">${esc(q.source)} · 第${q.number}题</div><h2>${q.type === "essay" ? "申论主观题" : q.type === "multiple" ? "多选题" : "单选题"} <span class="badge ${q.quality === "review" ? "warn" : ""}">${q.quality === "review" ? "待核验" : "可练习"}</span></h2>${q.issues.length ? `<div class="notice">${q.issues.map(esc).join("；")}</div>` : ""}${q.material ? `<details class="material" open><summary>阅读材料</summary><div class="prose">${rich(q.material)}</div></details>` : ""}<div class="prose question-stem">${rich(q.stem)}</div><div class="detail-options">${Object.entries(
+    `<p class="caption">${esc(q.source)} · 第${q.number}题</p><h2>${q.type === "essay" ? "申论主观题" : q.type === "multiple" ? "多选题" : "单选题"} <span class="badge ${q.quality === "review" ? "warn" : ""}">${q.quality === "review" ? "待核验" : "可练习"}</span></h2>${q.issues.length ? `<div class="notice">${q.issues.map(esc).join("；")}</div>` : ""}${q.material ? `<details class="material" open><summary>阅读材料</summary><div class="prose">${rich(q.material)}</div></details>` : ""}<div class="prose question-stem">${rich(q.stem)}</div><div class="detail-options">${Object.entries(
       q.options,
     )
       .map(([k, v]) => `<p><b>${k}.</b> ${rich(v)}</p>`)
@@ -71,7 +72,7 @@ function edit(q, d) {
   });
 }
 export async function renderLibrary(root, meta, view, params) {
-  const state = {
+  const defaults = {
     page: 1,
     module: "",
     category: "",
@@ -84,77 +85,173 @@ export async function renderLibrary(root, meta, view, params) {
     exam_level: "",
     tag: "",
     search: "",
-    ...params,
   };
-  let scope = view === "review" ? "wrong" : "all";
+  const state = {
+    ...defaults,
+    ...params,
+    page: Math.max(1, Number(params.page) || 1),
+  };
+  let scope = ["all", "unseen", "wrong", "favorite"].includes(params.scope)
+    ? params.scope
+    : view === "review"
+      ? "wrong"
+      : "all";
+  delete state.scope;
   let seq = 0;
+  const count = (n) => Number(n || 0).toLocaleString("zh-CN");
   root.innerHTML =
     heading(
-      view === "review" ? "REVIEW & REFLECT" : "YOUR QUESTION LIBRARY",
-      view === "review" ? "把错题，变成得分题。" : "我的题库",
-      `${meta.counts.total} 道题已保存 · ${meta.counts.ready} 道可练习 · ${meta.counts.review} 道待核验`,
+      "",
+      view === "review" ? "错题与收藏" : "我的题库",
+      view === "review"
+        ? "回看错因，留住重点。下一次，答得更有把握。"
+        : `${count(meta.counts.total)} 道题已保存 · ${count(meta.counts.ready)} 道可练习 · ${count(meta.counts.review)} 道待核验`,
     ) +
-    `<section class="card filter-bar" id="library-filters"><label>模块<select name="module">${options(unique(meta.facets.map((f) => f.module)), state.module)}</select></label><label>试卷类型<select name="kind">${options(unique(meta.papers.map(p => p.kind).filter(Boolean)),state.kind)}</select></label><label>试卷类别<select name="exam_level">${options(unique(meta.papers.map(p => p.exam_level).filter(Boolean)),state.exam_level)}</select></label><label>年份<select name="year">${options(unique(meta.papers.map(p => p.year).filter(Boolean)).sort((a,b) => b-a),state.year)}</select></label><label>小类<select name="category"></select></label><label>试卷<select name="paper_id">${options(
-      meta.papers.map((p) => [p.id, p.title]),
-      state.paper_id,
-    )}</select></label><label>题型<select name="type">${options(
-      [
-        ["single", "单选"],
-        ["multiple", "多选"],
-        ["essay", "申论主观题"],
-      ],
-      state.type,
-    )}</select></label><label>核验状态<select name="quality">${options(
-      [
-        ["ready", "可练习"],
-        ["review", "待核验"],
-      ],
-      state.quality,
-    )}</select></label><label class="search">搜索题干 / 解析<input name="search" placeholder="输入知识点或关键词" value="${esc(state.search)}"></label></section><div class="library-toolbar"><div class="segmented">${[
-      ["all", "全部"],
+    `
+    <section class="card library-filters" id="library-filters" aria-label="题库筛选">
+      <div class="filter-main"><label class="search-control">搜索题目<input name="search" type="search" placeholder="搜索题干、知识点或解析" value="${esc(state.search)}"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg></label>
+      <label>学习科目<select name="module">${options(unique(meta.facets.map((f) => f.module)), state.module, "全部科目")}</select></label><label>试卷类型<select name="kind">${options(unique(meta.papers.map((p) => p.kind)), state.kind)}</select></label><button class="secondary" id="reset-filters" hidden>清除筛选</button></div>
+      <details class="advanced-filters" ${["exam_level", "year", "category", "paper_id", "type", "quality", "topic", "tag"].some((k) => state[k]) ? "open" : ""}><summary>更多筛选 · 年份、试卷、题型与考点</summary><div class="filter-grid">
+      <label>试卷类别<select name="exam_level">${options(unique(meta.papers.map((p) => p.exam_level)), state.exam_level)}</select></label><label>年份<select name="year">${options(
+        unique(meta.papers.map((p) => p.year)).sort((a, b) => b - a),
+        state.year,
+      )}</select></label>
+      <label>知识小类<select name="category"></select></label><label>试卷<select name="paper_id"></select></label><label>题型<select name="type">${options(
+        [
+          ["single", "单选"],
+          ["multiple", "多选"],
+          ["essay", "申论主观题"],
+        ],
+        state.type,
+      )}</select></label>
+      <label>核验状态<select name="quality">${options(
+        [
+          ["ready", "可练习"],
+          ["review", "待核验"],
+        ],
+        state.quality,
+      )}</select></label><label>考点<select name="topic"></select></label><label>标签<select name="tag">${options(meta.tags, state.tag)}</select></label></div></details>
+      <div id="filter-summary" class="filter-summary"></div>
+    </section>
+    <div class="library-toolbar"><div class="segmented" role="group" aria-label="题目范围">${[
+      ["all", "全部题目"],
       ["unseen", "未做"],
       ["wrong", "错题"],
       ["favorite", "收藏"],
     ]
       .map(
         ([k, t]) =>
-          `<button data-scope="${k}" class="${scope === k ? "selected" : ""}">${t}</button>`,
+          `<button data-scope="${k}" class="${scope === k ? "selected" : ""}" aria-pressed="${scope === k}">${t}</button>`,
       )
       .join(
         "",
-      )}</div><div class="toolbar"><label class="inline-field">题量 <select id="practice-count"><option>10</option><option selected>20</option><option>30</option><option>50</option></select></label><button id="practice-current" class="primary">练习当前筛选</button><button id="practice-paper" class="secondary">整卷练习</button></div></div><p class="caption">错题按最近一次作答判断；核验状态以题目结构完整性为依据，原题答案仍需结合来源辨别。分类可在题目详情中调整。</p><section id="questions-list" class="question-list"></section><div id="pagination" class="pagination"></div>`;
+      )}</div><div class="toolbar"><label class="inline-field">模式<select id="practice-mode"><option value="practice">练习模式</option><option value="exam">考试模式</option></select></label><label class="inline-field">题量<select id="practice-count"><option>10</option><option selected>20</option><option>30</option><option>50</option></select></label><button id="practice-current" class="primary">开始练习</button><button id="practice-paper" class="secondary" hidden disabled title="请在更多筛选中选择一套试卷">整卷练习</button></div></div>
+    <div class="results-heading"><h2 id="result-count" aria-live="polite">正在查找题目…</h2><span class="muted">点击题目查看解析与笔记</span></div><section id="questions-list" class="question-list" aria-label="题目列表"></section><div id="pagination" class="pagination"></div><p class="caption">错题按最近一次作答判断；待核验题默认不参与练习。题库题数按卷内题次统计。</p>`;
   function filters() {
     return { ...state, ...(scope !== "all" ? { [scope]: "1" } : {}) };
   }
   function facets() {
+    const f = meta.facets.filter(
+      (f) => !state.module || f.module === state.module,
+    );
     $("[name=category]", root).innerHTML = options(
-      unique(
-        meta.facets
-          .filter((f) => !state.module || f.module === state.module)
-          .map((f) => f.category),
-      ),
+      unique(f.map((f) => f.category)),
       state.category,
+    );
+    $("[name=topic]", root).innerHTML = options(
+      unique(
+        f
+          .filter((f) => !state.category || f.category === state.category)
+          .map((f) => f.topic),
+      ),
+      state.topic,
     );
   }
   function paperOptions() {
-    const papers = meta.papers.filter(p => (!state.module || p.subject === state.module || (!p.subject && !["行测","申论"].includes(state.module))) && (!state.kind || p.kind === state.kind) && (!state.exam_level || p.exam_level === state.exam_level) && (!state.year || String(p.year) === String(state.year)));
-    if (!papers.some(p => p.id === state.paper_id)) state.paper_id = "";
-    $("[name=paper_id]",root).innerHTML = options(papers.map(p => [p.id,p.title]),state.paper_id);
+    const papers = meta.papers.filter(
+      (p) =>
+        (!state.module ||
+          paperSubject(p) === state.module ||
+          (!["行测", "申论"].includes(paperSubject(p)) &&
+            !["行测", "申论"].includes(state.module))) &&
+        (!state.kind || p.kind === state.kind) &&
+        (!state.exam_level || p.exam_level === state.exam_level) &&
+        (!state.year || String(p.year) === String(state.year)),
+    );
+    if (!papers.some((p) => p.id === state.paper_id)) state.paper_id = "";
+    $("[name=paper_id]", root).innerHTML = options(
+      papers.map((p) => [p.id, p.title]),
+      state.paper_id,
+    );
+    $("#practice-paper", root).disabled = !state.paper_id;
+    $("#practice-paper", root).hidden = !state.paper_id;
+    $("#practice-paper", root).title = state.paper_id
+      ? "练习所选试卷全部可练习题，忽略其他题目筛选"
+      : "请在更多筛选中选择一套试卷";
+  }
+  function syncURL() {
+    // replaceState keeps typing and dropdown changes in one history entry.
+    const q = query({
+      ...state,
+      page: state.page === 1 ? "" : state.page,
+      scope: scope === (view === "review" ? "wrong" : "all") ? "" : scope,
+    });
+    if (document.contains(root) && location.hash.split("?")[0] === `#${view}`)
+      history.replaceState(null, "", `#${view}${q ? "?" + q : ""}`);
+    try {
+      sessionStorage.setItem("finreg-library-route", location.hash);
+    } catch {}
+    const selected = $$("#library-filters select", root)
+      .filter((e) => e.value)
+      .map((e) => e.selectedOptions[0]?.textContent);
+    if (state.search) selected.push(`关键词：${state.search}`);
+    $("#reset-filters", root).hidden = !selected.length;
+    $("#filter-summary", root).innerHTML = selected.length
+      ? `<strong>已筛选 ${selected.length} 项</strong><span class="muted">${esc(selected.join(" / "))}</span>`
+      : "";
+  }
+  function scrollToList() {
+    $("#result-count", root).scrollIntoView({ block: "start" });
   }
   async function load() {
+    if (!root.isConnected) return;
     const n = ++seq;
-    const d = await api("/api/questions?" + query(filters()));
-    if (n !== seq) return;
-    $("#questions-list", root).innerHTML = d.items.length
+    const list = $("#questions-list", root);
+    list.setAttribute("aria-busy", "true");
+    $("#practice-current", root).disabled = true;
+    syncURL();
+    let d;
+    try {
+      d = await api("/api/questions?" + query(filters()));
+    } catch (e) {
+      if (n !== seq || !root.isConnected) return;
+      list.removeAttribute("aria-busy");
+      list.innerHTML = `<div class="empty"><h3>题目载入失败</h3><p>${esc(e.message)}</p><button class="secondary" id="retry-questions">重试</button></div>`;
+      $("#result-count", root).textContent = "暂时无法载入";
+      $("#pagination", root).innerHTML = "";
+      $("#retry-questions", root).onclick = handle(load);
+      return;
+    }
+    if (n !== seq || !root.isConnected) return;
+    if (d.pages && state.page > d.pages) {
+      state.page = d.pages;
+      return load();
+    }
+    list.removeAttribute("aria-busy");
+    $("#practice-current", root).disabled =
+      !d.total || state.quality === "review";
+    $("#result-count", root).textContent =
+      `${scope === "wrong" ? "待复习错题" : scope === "favorite" ? "已收藏题目" : "筛选结果"} · ${count(d.total)} 道`;
+    list.innerHTML = d.items.length
       ? d.items
           .map(
             (q) =>
-              `<article class="card question-preview"><div class="question-meta"><span class="badge">${esc(q.module)}</span><span>${esc(q.category)}</span><span class="muted">${q.year || ""} · 第${q.number}题 · ${q.type === "essay" ? "申论主观题" : q.type === "multiple" ? "多选" : "单选"}</span>${q.quality === "review" ? '<span class="badge warn">待核验</span>' : ""}${q.last_correct === 0 ? '<span class="badge wrong">错题</span>' : ""}</div><button class="question-title" data-id="${esc(q.id)}">${esc(q.stem.replace(/\[\[image:[^\]]+\]\]/g, "[题图]").slice(0, 220))}</button><div class="question-bottom"><span>${esc(q.source)}</span><button class="quiet favorite" data-favorite="${esc(q.id)}" data-value="${q.favorite}">${q.favorite ? "★ 已收藏" : "☆ 收藏"}</button></div></article>`,
+              `<article class="question-preview"><div class="question-meta"><span class="badge">${esc(q.module)}</span><span>${esc(q.category)}</span><span class="muted">${q.year || ""} · 第${q.number}题 · ${q.type === "essay" ? "申论主观题" : q.type === "multiple" ? "多选" : "单选"}</span>${q.quality === "review" ? '<span class="badge warn">待核验</span>' : ""}${q.last_correct === 0 ? '<span class="badge wrong">错题</span>' : ""}</div><button class="question-title" data-id="${esc(q.id)}">${esc(q.stem.replace(/\[\[image:[^\]]+\]\]/g, "[题图]").slice(0, 220))}</button><div class="question-bottom"><span>${esc(q.source)}</span><button class="quiet favorite" data-favorite="${esc(q.id)}" data-value="${q.favorite}" aria-pressed="${Boolean(q.favorite)}">${q.favorite ? "已收藏" : "收藏题目"}</button></div></article>`,
           )
           .join("")
-      : `<div class="card empty"><h2>${scope === "wrong" ? "暂时没有待复习错题" : "没有符合条件的题目"}</h2><p>调整筛选，或开始一次新的练习。</p></div>`;
+      : `<div class="empty"><h2>${scope === "wrong" ? "当前没有待复习错题" : scope === "favorite" ? "还没有符合条件的收藏" : "没有找到符合条件的题目"}</h2><p>${scope === "wrong" ? "完成练习后，答错的题目会自动收录在这里。" : "试试减少筛选条件，或在题目详情中收藏重点题。"}</p><button class="secondary" id="empty-reset">清除条件，查看全部题目</button></div>`;
     $("#pagination", root).innerHTML =
-      `<span>共 ${d.total} 道 · 第 ${d.page} / ${d.pages || 1} 页</span><button class="secondary" id="prev-page" ${d.page <= 1 ? "disabled" : ""}>上一页</button><button class="secondary" id="next-page" ${d.page >= d.pages ? "disabled" : ""}>下一页</button>`;
+      `<span>第 ${d.page} / ${d.pages || 1} 页 · 每页 20 道</span>${d.pages > 1 ? `<label>前往<input id="jump-page" type="number" min="1" max="${d.pages}" value="${d.page}" aria-label="跳转页码"></label><button class="secondary" id="go-page">跳转</button>` : ""}<button class="secondary" id="prev-page" ${d.page <= 1 ? "disabled" : ""}>上一页</button><button class="secondary" id="next-page" ${d.page >= d.pages ? "disabled" : ""}>下一页</button>`;
     $$("[data-id]", root).forEach(
       (b) => (b.onclick = handle(() => questionDetail(b.dataset.id))),
     );
@@ -170,14 +267,52 @@ export async function renderLibrary(root, meta, view, params) {
     $("#prev-page", root).onclick = handle(async () => {
       state.page--;
       await load();
+      scrollToList();
     });
     $("#next-page", root).onclick = handle(async () => {
       state.page++;
       await load();
+      scrollToList();
+    });
+    const jump = $("#go-page", root);
+    if (jump) {
+      jump.onclick = handle(async () => {
+        state.page = Math.max(
+          1,
+          Math.min(d.pages, Number($("#jump-page", root).value) || 1),
+        );
+        await load();
+        scrollToList();
+      });
+      $("#jump-page", root).onkeydown = (e) => {
+        if (e.key === "Enter") jump.click();
+      };
+    }
+    const reset = $("#empty-reset", root);
+    if (reset) reset.onclick = handle(() => clear(true));
+  }
+  let debounce;
+  async function clear(all = false) {
+    clearTimeout(debounce);
+    Object.assign(state, defaults);
+    if (all) scope = "all";
+    $$("#library-filters select, #library-filters input", root).forEach(
+      (e) => (e.value = ""),
+    );
+    updateScope();
+    facets();
+    paperOptions();
+    await load();
+  }
+  function updateScope() {
+    $$("[data-scope]", root).forEach((b) => {
+      b.classList.toggle("selected", b.dataset.scope === scope);
+      b.setAttribute("aria-pressed", b.dataset.scope === scope);
     });
   }
   facets();
   paperOptions();
+  $("#reset-filters", root).onclick = handle(() => clear());
   $$("#library-filters select", root).forEach(
     (e) =>
       (e.onchange = handle(async () => {
@@ -185,48 +320,54 @@ export async function renderLibrary(root, meta, view, params) {
         state.page = 1;
         if (e.name === "module") {
           state.category = "";
+          state.topic = "";
+          facets();
+        }
+        if (e.name === "category") {
+          state.topic = "";
           facets();
         }
         paperOptions();
         await load();
       })),
   );
-  let debounce;
   $("[name=search]", root).oninput = (e) => {
+    state.search = e.target.value;
+    state.page = 1;
     clearTimeout(debounce);
-    debounce = setTimeout(
-      handle(async () => {
-        state.search = e.target.value;
-        state.page = 1;
-        await load();
-      }),
-      250,
-    );
+    debounce = setTimeout(handle(load), 250);
   };
   $$("[data-scope]", root).forEach(
     (b) =>
       (b.onclick = handle(async () => {
         scope = b.dataset.scope;
         state.page = 1;
-        $$("[data-scope]", root).forEach((x) =>
-          x.classList.toggle("selected", x === b),
-        );
-        paperOptions();
+        updateScope();
         await load();
       })),
   );
   $("#practice-current", root).onclick = handle(() =>
     startPractice({
       filters: filters(),
-      mode: scope === "wrong" ? "review" : "practice",
+      mode:
+        $("#practice-mode", root).value === "exam"
+          ? "exam"
+          : scope === "wrong"
+            ? "review"
+            : "practice",
       count: Number($("#practice-count", root).value),
       title:
         scope === "wrong" ? "错题复习" : `${state.module || "综合"}专项练习`,
     }),
   );
-  $("#practice-paper", root).onclick = handle(() => {
-    if (!state.paper_id) return toast("请先选择一套试卷");
-    return startPractice({filters:{paper_id:state.paper_id},mode:"exam",shuffle:false,title:meta.papers.find(p=>p.id===state.paper_id).title});
-  });
+  $("#practice-paper", root).onclick = handle(() =>
+    startPractice({
+      filters: { paper_id: state.paper_id },
+      mode: $("#practice-mode", root).value,
+      full_paper: true,
+      shuffle: false,
+      title: meta.papers.find((p) => p.id === state.paper_id).title,
+    }),
+  );
   await load();
 }

@@ -1,4 +1,4 @@
-import unittest,tempfile,json,threading,urllib.request,urllib.error,sqlite3,re
+import unittest,tempfile,json,threading,urllib.request,urllib.error,sqlite3,re,gzip
 from pathlib import Path
 from datetime import datetime,timedelta
 import database,services,importer
@@ -84,6 +84,11 @@ class PracticeTests(unittest.TestCase):
             req=urllib.request.Request(base+'/api/session',data=b'{}',headers={'Content-Type':'application/json','Origin':'https://example.com'})
             with self.assertRaises(urllib.error.HTTPError) as ctx:urllib.request.urlopen(req)
             self.assertEqual(ctx.exception.code,403)
+            req=urllib.request.Request(base+'/api/meta',headers={'Accept-Encoding':'gzip'})
+            with urllib.request.urlopen(req) as response:
+                self.assertEqual(response.headers['Content-Encoding'],'gzip')
+                self.assertIn('meta;dur=',response.headers['Server-Timing'])
+                self.assertEqual(json.loads(gzip.decompress(response.read()))['counts']['total'],1110)
             with self.assertRaises(urllib.error.HTTPError):urllib.request.urlopen(base+'/sources/..%2F..%2Fapp.py')
         finally:server.shutdown();server.server_close();thread.join()
 if __name__=='__main__':unittest.main()
