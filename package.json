@@ -1,0 +1,8 @@
+{
+  "name": "finreg-practice",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node --check web/app.js && node --check web/practice.js && node --check web/library.js && node --check web/stats.js && node --check web/data.js && node --check web/ui.js"
+  }
+}
