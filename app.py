@@ -1,11 +1,28 @@
-"""Local-only web application. Python standard library; no cloud services required."""
+"""Single-user study application. Python standard library; local by default."""
 from http.server import ThreadingHTTPServer,BaseHTTPRequestHandler
 from urllib.parse import urlparse,parse_qs,unquote
-import json,mimetypes,traceback,argparse,sqlite3,tempfile,os,gzip,time
+import json,mimetypes,traceback,argparse,sqlite3,tempfile,os,gzip,time,signal
 from pathlib import Path
 from contextlib import closing
 import database,services,importer
 ROOT=Path(__file__).resolve().parent
+
+def configured_origins(value):
+    origins=set()
+    for item in value.split(','):
+        if not item.strip(): continue
+        parsed=urlparse(item.strip())
+        if (parsed.scheme not in ('http','https') or not parsed.hostname or '*' in parsed.hostname
+                or parsed.username is not None or parsed.password is not None
+                or parsed.path not in ('','/') or parsed.query or parsed.fragment):
+            raise ValueError('FINREG_ALLOWED_ORIGINS 应为逗号分隔的 http(s)://主机[:端口]，不能包含路径')
+        port=parsed.port
+        host=parsed.hostname.lower()
+        if ':' in host: host=f'[{host}]'
+        if port and port!={'http':80,'https':443}[parsed.scheme]: host+=f':{port}'
+        origins.add(f'{parsed.scheme}://{host}')
+    return origins
+
 class Handler(BaseHTTPRequestHandler):
     def send(self,data,status=200,ctype='application/json; charset=utf-8',headers=None):
         body=json.dumps(data,ensure_ascii=False,separators=(',',':')).encode() if ctype.startswith('application/json') else data
@@ -23,14 +40,20 @@ class Handler(BaseHTTPRequestHandler):
         if size<1 or size>30_000_000: raise ValueError('数据大小不合法（上限30MB）')
         return json.loads(self.rfile.read(size))
     def authorized(self):
-        host=self.headers.get('Host','')
-        if host not in (f'127.0.0.1:{self.server.server_port}',f'localhost:{self.server.server_port}'): return False
+        port=self.server.server_port
+        origins={f'http://127.0.0.1:{port}',f'http://localhost:{port}'} | getattr(self.server,'allowed_origins',set())
+        hosts={urlparse(origin).netloc for origin in origins}
+        for origin in origins:
+            parsed=urlparse(origin)
+            if parsed.port is None: hosts.add(f'{parsed.netloc}:{443 if parsed.scheme=="https" else 80}')
+        if self.headers.get('Host','').lower() not in hosts: return False
         origin=self.headers.get('Origin')
-        return not origin or origin in (f'http://127.0.0.1:{self.server.server_port}',f'http://localhost:{self.server.server_port}')
+        return not origin or origin in origins
     def do_GET(self):
-        if not self.authorized():return self.send({'error':'仅允许本地应用访问'},403)
+        if not self.authorized():return self.send({'error':'访问来源未获允许，请检查 FINREG_ALLOWED_ORIGINS'},403)
         url=urlparse(self.path); path=url.path; filters={k:v[-1] for k,v in parse_qs(url.query).items()}
         try:
+            if path=='/healthz':return self.send({'status':'ok'})
             if path=='/api/meta':
                 started=time.perf_counter(); meta=services.metadata()
                 return self.send(meta,headers={'Server-Timing':f'meta;dur={(time.perf_counter()-started)*1000:.1f}'})
@@ -65,7 +88,7 @@ class Handler(BaseHTTPRequestHandler):
         except Exception:
             traceback.print_exc();return self.send({'error':'服务处理失败，请查看服务日志'},500)
     def do_POST(self):
-        if not self.authorized():return self.send({'error':'仅允许本地应用访问'},403)
+        if not self.authorized():return self.send({'error':'访问来源未获允许，请检查 FINREG_ALLOWED_ORIGINS'},403)
         try:
             body=self.json_body(); path=urlparse(self.path).path
             if path=='/api/session':result=services.create_session(body)
@@ -85,9 +108,18 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self,fmt,*args):print(f'{self.log_date_time_string()} {fmt%args}',flush=True)
 
 def main():
-    parser=argparse.ArgumentParser(); parser.add_argument('--port',type=int,default=8765); args=parser.parse_args()
-    database.initialize(); server=ThreadingHTTPServer(('127.0.0.1',args.port),Handler)
-    print(f'FinReg Practice: http://127.0.0.1:{args.port}',flush=True)
+    parser=argparse.ArgumentParser()
+    parser.add_argument('--host',default=os.environ.get('FINREG_HOST','127.0.0.1'))
+    parser.add_argument('--port',type=int,default=int(os.environ.get('FINREG_PORT','8765')))
+    args=parser.parse_args()
+    origins=configured_origins(os.environ.get('FINREG_ALLOWED_ORIGINS',''))
+    database.initialize(); server=ThreadingHTTPServer((args.host,args.port),Handler)
+    server.allowed_origins=origins
+    server.daemon_threads=False
+    def stop(signum,frame): raise KeyboardInterrupt
+    signal.signal(signal.SIGTERM,stop)
+    print(f'FinReg Practice: http://{args.host}:{args.port}',flush=True)
     try:server.serve_forever()
-    except KeyboardInterrupt:server.server_close()
+    except KeyboardInterrupt:pass
+    finally:server.server_close()
 if __name__=='__main__':main()

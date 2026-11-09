@@ -8,3 +8,6 @@ output/
 data/*
 !data/.gitkeep
 *.log
+.env
+.env.*
+!.env.example

@@ -1,0 +1,31 @@
+name: finreg-practice
+
+services:
+  app:
+    image: ${FINREG_IMAGE:?请先在 .env 中设置 FINREG_IMAGE}
+    build:
+      context: .
+    restart: unless-stopped
+    init: true
+    user: "${FINREG_UID:-1000}:${FINREG_GID:-1000}"
+    ports:
+      - "${FINREG_BIND_ADDRESS:-127.0.0.1}:${FINREG_PORT:-8765}:8765"
+    environment:
+      FINREG_HOST: 0.0.0.0
+      FINREG_PORT: "8765"
+      FINREG_DB: /app/data/practice.sqlite3
+      FINREG_ALLOWED_ORIGINS: ${FINREG_ALLOWED_ORIGINS:-}
+    volumes:
+      - type: bind
+        source: ${FINREG_DATA_DIR:-./data}
+        target: /app/data
+    stop_grace_period: 30s
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

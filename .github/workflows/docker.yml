@@ -1,0 +1,117 @@
+name: Docker build and publish
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Test and smoke-test the container
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      # These tests create their own fixtures. Private banks are not in Git.
+      - name: Run portable backend tests and frontend checks
+        run: |
+          python -m unittest discover -s tests -p 'test_expanded_bank.py' -v
+          python -m unittest discover -s tests -p 'test_deployment.py' -v
+          npm run check
+          docker compose --env-file .env.example config --quiet
+
+      - name: Build the test image
+        run: docker build --tag finreg-practice:smoke .
+
+      - name: Verify startup, grading and persistent data after restart
+        run: |
+          docker volume create finreg-smoke-data
+          docker run --detach --name finreg-smoke \
+            --publish 127.0.0.1:18765:8765 \
+            --mount type=volume,source=finreg-smoke-data,target=/app/data \
+            --env FINREG_ALLOWED_ORIGINS=http://127.0.0.1:18765 \
+            finreg-practice:smoke
+          python scripts/smoke_container.py --phase write
+          docker restart finreg-smoke
+          python scripts/smoke_container.py --phase verify
+
+      - name: Show container logs and clean up
+        if: always()
+        run: |
+          docker logs finreg-smoke 2>/dev/null || true
+          docker rm --force finreg-smoke 2>/dev/null || true
+          docker volume rm finreg-smoke-data 2>/dev/null || true
+
+  publish:
+    name: Publish amd64 and arm64 images to GHCR
+    needs: check
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Set lowercase image name
+        id: image
+        shell: bash
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-qemu-action@v4
+        with:
+          platforms: arm64
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/metadata-action@v6
+        id: meta
+        with:
+          images: ${{ steps.image.outputs.name }}
+          flavor: latest=false
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=branch,prefix=branch-
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix=sha-,format=long
+      - uses: docker/build-push-action@v7
+        id: build
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Write image details
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          printf '### Published image\n\n`%s@%s`\n\nTags:\n```text\n%s\n```\n' \
+            "$IMAGE" "$DIGEST" "$TAGS" >> "$GITHUB_STEP_SUMMARY"

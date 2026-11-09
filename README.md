@@ -15,6 +15,12 @@ cd D:\project\finreg-practice
 
 首次导入已完成，当前 data 目录包含实际题库。Git 不包含私人题目和学习数据，新克隆源码后须自行提供 `data/bank.json` 或使用页面导入题库。
 
+## Docker / 服务器部署
+
+已提供 [Dockerfile](Dockerfile)、[GitHub Actions](.github/workflows/docker.yml) 和 [Compose 配置](compose.yaml)。Actions 检查通过后发布 GHCR 的 amd64/arm64 镜像；复制 `.env.example` 为 `.env`，设置镜像名和访问来源后，可用 `docker compose pull`、`docker compose up -d` 部署。
+
+`data` 整体挂载持久化，镜像不包含本地题库和学习数据。迁移现有数据库、题图、原卷、目录权限、反向代理、私有镜像登录与更新方式见 [Docker 部署说明](docs/docker-deployment.md)。
+
 ## 当前题库
 
 | 来源 | 套数 | 卷内题次 | 可练习 | 待核验 |
@@ -92,7 +98,7 @@ python scripts/audit_fenbi_api.py
 
 页面“数据库备份”使用 SQLite backup API，支持服务运行中下载；数据库备份不含图片/PDF文件。完整迁移请停止服务后复制题库、原题与图片数据；迁移备份不要包含 `session.private.json` 等登录态文件。恢复数据库时停止服务，将备份替换为 `data/practice.sqlite3`（先保留现有数据副本），再启动。
 
-服务只监听127.0.0.1，不提供账号体系或公网访问。
+直接启动默认只监听127.0.0.1。服务器部署可以配置 `FINREG_HOST`、`FINREG_PORT` 和 `FINREG_ALLOWED_ORIGINS`；服务没有独立账号体系，公网使用应接入已有认证的代理或受控网络，详见部署说明。
 
 ## 开发与验证
 

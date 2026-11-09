@@ -1,0 +1,11 @@
+# Build context allowlist: private banks, cookies, backups and local files stay out.
+**
+!Dockerfile
+!.dockerignore
+!app.py
+!database.py
+!services.py
+!importer.py
+!taxonomy.py
+!web/
+!web/**
