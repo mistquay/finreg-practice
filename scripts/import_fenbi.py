@@ -5,10 +5,18 @@ from html.parser import HTMLParser
 from urllib.request import Request,urlopen
 from urllib.parse import urlparse
 from datetime import datetime,timezone,timedelta
-import json,re,hashlib,sys
+import json,re,hashlib,sys,threading,time
+try:
+    import requests
+except ImportError:
+    requests=None
+HTTP_LOCAL=threading.local()
+IMAGE_LOCK=threading.Lock()
+IMAGE_LAST=0.0
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
 from importer import PlainText
 ASSETS=ROOT/'data/assets';ASSETS.mkdir(exist_ok=True)
+ASSET_INDEX={p.stem:p for p in ASSETS.iterdir() if p.is_file()}
 class Content(PlainText):
     def handle_starttag(self,tag,attrs):
         if tag=='img':
@@ -20,20 +28,41 @@ def plain(s):
     p=Content();p.feed(s or '');return re.sub(r'\n{3,}','\n\n',''.join(p.parts)).strip(),p.images
 
 def download(src):
+    global IMAGE_LAST
     url='https:'+src if src.startswith('//') else src
     host=(urlparse(url).hostname or '').lower()
     if urlparse(url).scheme not in ('https','http') or not any(host==h or host.endswith('.'+h) for h in ('fbstatic.cn','fenbike.cn','fenbi.com')):return src,None,'unsupported image host'
     key=hashlib.sha256(url.encode()).hexdigest()[:24]
-    existing=list(ASSETS.glob(key+'.*'))
-    if existing:return src,'/assets/'+existing[0].name,None
+    existing=ASSET_INDEX.get(key)
+    if existing and existing.exists():return src,'/assets/'+existing.name,None
     try:
-        with urlopen(Request(url,headers={'User-Agent':'Mozilla/5.0','Referer':'https://www.fenbi.com/'}),timeout=25) as r:
-            ctype=r.headers.get_content_type();ext={'image/png':'.png','image/jpeg':'.jpg','image/gif':'.gif','image/webp':'.webp'}.get(ctype)
-            if not ext:raise ValueError('unsupported '+ctype)
-            data=r.read(8_000_001)
-            if len(data)>8_000_000:raise ValueError('image too large')
-            filename=key+ext;(ASSETS/filename).write_bytes(data)
-            return src,'/assets/'+filename,None
+        with IMAGE_LOCK:
+            time.sleep(max(0,IMAGE_LAST+.08-time.monotonic()))
+            IMAGE_LAST=time.monotonic()
+        headers={'User-Agent':'Mozilla/5.0','Referer':'https://www.fenbi.com/'}
+        if requests is not None:
+            if not hasattr(HTTP_LOCAL,'session'):
+                from urllib3.util.retry import Retry
+                HTTP_LOCAL.session=requests.Session()
+                retries=Retry(total=3,backoff_factor=2,status_forcelist=[429,500,502,503,504],respect_retry_after_header=True)
+                HTTP_LOCAL.session.mount('https://',requests.adapters.HTTPAdapter(max_retries=retries))
+            with HTTP_LOCAL.session.get(url,headers=headers,timeout=(10,25),stream=True) as response:
+                response.raise_for_status()
+                ctype=response.headers.get('Content-Type','').split(';')[0].strip()
+                data=bytearray()
+                for chunk in response.iter_content(65536):
+                    data.extend(chunk)
+                    if len(data)>8_000_000:raise ValueError('image too large')
+        else:
+            with urlopen(Request(url,headers=headers),timeout=25) as response:
+                ctype=response.headers.get_content_type();data=response.read(8_000_001)
+        ext={'image/png':'.png','image/jpeg':'.jpg','image/gif':'.gif','image/webp':'.webp'}.get(ctype)
+        if not ext:raise ValueError('unsupported '+ctype)
+        if len(data)>8_000_000:raise ValueError('image too large')
+        filename=key+ext;target=ASSETS/filename
+        temp=target.with_suffix(ext+'.part');temp.write_bytes(data);temp.replace(target)
+        ASSET_INDEX[key]=target
+        return src,'/assets/'+filename,None
     except Exception as e:return src,None,str(e)
 
 asset_map={}

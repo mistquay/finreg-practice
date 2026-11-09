@@ -34,8 +34,12 @@ def decode(row):
     return d
 
 def store_paper(conn,paper):
-    conn.execute('INSERT OR IGNORE INTO papers(id,title,year,source,sha256,duration_minutes) VALUES(?,?,?,?,?,?)',
-        (paper['id'],paper['title'],paper.get('year'),paper.get('source',''),paper.get('sha256',''),paper.get('duration_minutes',120)))
+    conn.execute('''INSERT INTO papers(id,title,year,source,sha256,duration_minutes,subject,kind,exam_level)
+        VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET
+        subject=CASE WHEN excluded.subject!='' THEN excluded.subject ELSE papers.subject END,
+        kind=CASE WHEN excluded.kind!='' THEN excluded.kind ELSE papers.kind END,
+        exam_level=CASE WHEN excluded.exam_level!='' THEN excluded.exam_level ELSE papers.exam_level END''',
+        (paper['id'],paper['title'],paper.get('year'),paper.get('source',''),paper.get('sha256',''),paper.get('duration_minutes',120),paper.get('subject',''),paper.get('kind',''),paper.get('exam_level','')))
     added=0
     for q in paper['questions']:
         q=dict(q,paper_id=paper['id'])
@@ -45,15 +49,26 @@ def store_paper(conn,paper):
         if not cur.rowcount and q.get('raw'):
             conn.execute('UPDATE questions SET raw=?,difficulty=? WHERE id=?',(json.dumps(q['raw'],ensure_ascii=False),q.get('difficulty'),q['id']))
             if q.get('provider')=='fenbi':
-                conn.execute('UPDATE questions SET topic=?,tags=? WHERE id=? AND edited=0',(q['topic'],json.dumps(q['tags'],ensure_ascii=False),q['id']))
+                # A complete API capture can fill old explanations, but never overwrite manual edits.
+                if q['raw'].get('capture_format') == 'paper-solution-v1':
+                    update_fields=[k for k in FIELDS if k not in ('id','paper_id','raw')]
+                    update_values=[json.dumps(q.get(k,{} if k=='options' else []),ensure_ascii=False) if k in JSON_FIELDS else q.get(k,None if k=='difficulty' else '') for k in update_fields]
+                    conn.execute('UPDATE questions SET '+','.join(k+'=?' for k in update_fields)+' WHERE id=? AND edited=0',update_values+[q['id']])
+                else:
+                    conn.execute('UPDATE questions SET topic=?,tags=? WHERE id=? AND edited=0',(q['topic'],json.dumps(q['tags'],ensure_ascii=False),q['id']))
     return added
 
 def initialize():
     DB_PATH.parent.mkdir(parents=True,exist_ok=True)
     with connect() as conn:
         conn.executescript(SCHEMA)
+        paper_columns={r[1] for r in conn.execute('PRAGMA table_info(papers)')}
+        for name in ('subject','kind','exam_level'):
+            if name not in paper_columns:
+                conn.execute(f"ALTER TABLE papers ADD COLUMN {name} TEXT NOT NULL DEFAULT ''")
         if 'edited' not in {r[1] for r in conn.execute('PRAGMA table_info(questions)')}:
             conn.execute('ALTER TABLE questions ADD COLUMN edited INTEGER NOT NULL DEFAULT 0')
         for bank in (ROOT/'data/bank.json', ROOT/'data/fenbi-bank.json'):
             if bank.exists():
-                for p in json.loads(bank.read_text(encoding='utf-8'))['papers']: store_paper(conn,p)
+                for p in json.loads(bank.read_text(encoding='utf-8'))['papers']:
+                    if not conn.execute('SELECT 1 FROM papers WHERE id=?',(p['id'],)).fetchone(): store_paper(conn,p)

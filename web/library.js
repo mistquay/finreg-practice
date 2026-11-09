@@ -17,13 +17,13 @@ import {
 export async function questionDetail(id) {
   const q = await api("/api/question/" + encodeURIComponent(id) + "?answer=1");
   const d = modal(
-    `<div class="eyebrow">${esc(q.source)} · 第${q.number}题</div><h2>${q.type === "multiple" ? "多选题" : "单选题"} <span class="badge ${q.quality === "review" ? "warn" : ""}">${q.quality === "review" ? "待核验" : "可练习"}</span></h2>${q.issues.length ? `<div class="notice">${q.issues.map(esc).join("；")}</div>` : ""}${q.material ? `<details class="material" open><summary>阅读材料</summary><div class="prose">${rich(q.material)}</div></details>` : ""}<div class="prose question-stem">${rich(q.stem)}</div><div class="detail-options">${Object.entries(
+    `<div class="eyebrow">${esc(q.source)} · 第${q.number}题</div><h2>${q.type === "essay" ? "申论主观题" : q.type === "multiple" ? "多选题" : "单选题"} <span class="badge ${q.quality === "review" ? "warn" : ""}">${q.quality === "review" ? "待核验" : "可练习"}</span></h2>${q.issues.length ? `<div class="notice">${q.issues.map(esc).join("；")}</div>` : ""}${q.material ? `<details class="material" open><summary>阅读材料</summary><div class="prose">${rich(q.material)}</div></details>` : ""}<div class="prose question-stem">${rich(q.stem)}</div><div class="detail-options">${Object.entries(
       q.options,
     )
       .map(([k, v]) => `<p><b>${k}.</b> ${rich(v)}</p>`)
       .join(
         "",
-      )}</div><div class="answer-box"><strong>来源参考答案：${q.answer.join("、") || "未提供"}</strong><div class="prose">${rich(q.explanation) || "来源暂未提供文字解析。请结合原卷或课程核对。"}</div></div><p>${sourceLink(q)}</p><div class="toolbar"><button id="detail-favorite" class="secondary">${q.favorite ? "取消收藏" : "收藏题目"}</button><button id="detail-edit" class="secondary">编辑 / 核验</button></div><label class="field">我的笔记<textarea id="detail-note" rows="3">${esc(q.note)}</textarea></label><button id="save-note" class="primary">保存笔记</button>${q.provider ? `<details class="raw"><summary>来源字段 · ${esc(q.provider)} / ${esc(q.external_id)} · 难度 ${q.difficulty ?? "未提供"}</summary><p class="caption">完整原始业务字段保存在本地，未用到的字段也会保留。${q.raw?.platform_statistics?.totalCount != null ? `粉笔平台作答量 ${q.raw.platform_statistics.totalCount} 次，平台正确率 ${Number(q.raw.platform_statistics.correctRatio).toFixed(1)}%（采集时快照，与个人统计分开）。` : ""}</p><pre>${esc(JSON.stringify(q.raw, null, 2))}</pre></details>` : ""}`,
+      )}</div><div class="answer-box"><strong>来源参考答案：${q.type === "essay" ? "见下方文字解析" : q.answer.join("、") || "未提供"}</strong><div class="prose">${rich(q.explanation) || "来源暂未提供文字解析。请结合原卷或课程核对。"}</div></div><p>${sourceLink(q)}</p><div class="toolbar"><button id="detail-favorite" class="secondary">${q.favorite ? "取消收藏" : "收藏题目"}</button><button id="detail-edit" class="secondary">编辑 / 核验</button></div><label class="field">我的笔记<textarea id="detail-note" rows="3">${esc(q.note)}</textarea></label><button id="save-note" class="primary">保存笔记</button>${q.provider ? `<details class="raw"><summary>来源字段 · ${esc(q.provider)} / ${esc(q.external_id)} · 难度 ${q.difficulty ?? "未提供"}</summary><p class="caption">完整原始业务字段保存在本地，未用到的字段也会保留。${q.raw?.platform_statistics?.totalCount != null ? `粉笔平台作答量 ${q.raw.platform_statistics.totalCount} 次，平台正确率 ${Number(q.raw.platform_statistics.correctRatio).toFixed(1)}%（采集时快照，与个人统计分开）。` : ""}</p><pre>${esc(JSON.stringify(q.raw, null, 2))}</pre></details>` : ""}`,
   );
   $("#detail-favorite", d).onclick = handle(async (e) => {
     const v = await api("/api/mark/" + id, { favorite: !q.favorite });
@@ -42,7 +42,7 @@ function edit(q, d) {
     Object.entries(q.options)
       .map(([k, v]) => k + "=" + v.replaceAll("\n", " "))
       .join("\n"),
-  )}</textarea></label><div class="form-grid"><label>参考答案<input name="answer" value="${q.answer.join("")}" placeholder="例如 A 或 ACD"></label><label>题型<select name="type"><option value="single" ${q.type === "single" ? "selected" : ""}>单选</option><option value="multiple" ${q.type === "multiple" ? "selected" : ""}>多选</option></select></label><label>核验状态<select name="quality"><option value="review" ${q.quality === "review" ? "selected" : ""}>待核验</option><option value="ready" ${q.quality === "ready" ? "selected" : ""}>可练习（已核验）</option></select></label><label>模块<input name="module" value="${esc(q.module)}" required></label><label>小类<input name="category" value="${esc(q.category)}" required></label><label>考点<input name="topic" value="${esc(q.topic)}" required></label></div><label class="field">标签（逗号分隔）<input name="tags" value="${esc(q.tags.join("，"))}"></label><label class="field">阅读材料<textarea name="material" rows="4">${esc(q.material)}</textarea></label><label class="field">解析<textarea name="explanation" rows="5">${esc(q.explanation)}</textarea></label><button class="primary" type="submit">保存修改</button></form>`;
+  )}</textarea></label><div class="form-grid"><label>参考答案<input name="answer" value="${q.answer.join("")}" placeholder="例如 A 或 ACD"></label><label>题型<select name="type"><option value="essay" ${q.type === "essay" ? "selected" : ""}>申论主观题</option><option value="single" ${q.type === "single" ? "selected" : ""}>单选</option><option value="multiple" ${q.type === "multiple" ? "selected" : ""}>多选</option></select></label><label>核验状态<select name="quality"><option value="review" ${q.quality === "review" ? "selected" : ""}>待核验</option><option value="ready" ${q.quality === "ready" ? "selected" : ""}>可练习（已核验）</option></select></label><label>模块<input name="module" value="${esc(q.module)}" required></label><label>小类<input name="category" value="${esc(q.category)}" required></label><label>考点<input name="topic" value="${esc(q.topic)}" required></label></div><label class="field">标签（逗号分隔）<input name="tags" value="${esc(q.tags.join("，"))}"></label><label class="field">阅读材料<textarea name="material" rows="4">${esc(q.material)}</textarea></label><label class="field">解析<textarea name="explanation" rows="5">${esc(q.explanation)}</textarea></label><button class="primary" type="submit">保存修改</button></form>`;
   $(".dialog-close", d).onclick = () => d.close();
   $("#edit-form", d).onsubmit = handle(async (e) => {
     e.preventDefault();
@@ -79,6 +79,9 @@ export async function renderLibrary(root, meta, view, params) {
     paper_id: "",
     quality: "",
     type: "",
+    year: "",
+    kind: "",
+    exam_level: "",
     tag: "",
     search: "",
     ...params,
@@ -91,13 +94,14 @@ export async function renderLibrary(root, meta, view, params) {
       view === "review" ? "把错题，变成得分题。" : "我的题库",
       `${meta.counts.total} 道题已保存 · ${meta.counts.ready} 道可练习 · ${meta.counts.review} 道待核验`,
     ) +
-    `<section class="card filter-bar" id="library-filters"><label>模块<select name="module">${options(unique(meta.facets.map((f) => f.module)), state.module)}</select></label><label>小类<select name="category"></select></label><label>试卷<select name="paper_id">${options(
+    `<section class="card filter-bar" id="library-filters"><label>模块<select name="module">${options(unique(meta.facets.map((f) => f.module)), state.module)}</select></label><label>试卷类型<select name="kind">${options(unique(meta.papers.map(p => p.kind).filter(Boolean)),state.kind)}</select></label><label>试卷类别<select name="exam_level">${options(unique(meta.papers.map(p => p.exam_level).filter(Boolean)),state.exam_level)}</select></label><label>年份<select name="year">${options(unique(meta.papers.map(p => p.year).filter(Boolean)).sort((a,b) => b-a),state.year)}</select></label><label>小类<select name="category"></select></label><label>试卷<select name="paper_id">${options(
       meta.papers.map((p) => [p.id, p.title]),
       state.paper_id,
     )}</select></label><label>题型<select name="type">${options(
       [
         ["single", "单选"],
         ["multiple", "多选"],
+        ["essay", "申论主观题"],
       ],
       state.type,
     )}</select></label><label>核验状态<select name="quality">${options(
@@ -118,7 +122,7 @@ export async function renderLibrary(root, meta, view, params) {
       )
       .join(
         "",
-      )}</div><div class="toolbar"><label class="inline-field">题量 <select id="practice-count"><option>10</option><option selected>20</option><option>30</option><option>50</option></select></label><button id="practice-current" class="primary">练习当前筛选</button></div></div><p class="caption">错题按最近一次作答判断；核验状态以题目结构完整性为依据，原题答案仍需结合来源辨别。分类可在题目详情中调整。</p><section id="questions-list" class="question-list"></section><div id="pagination" class="pagination"></div>`;
+      )}</div><div class="toolbar"><label class="inline-field">题量 <select id="practice-count"><option>10</option><option selected>20</option><option>30</option><option>50</option></select></label><button id="practice-current" class="primary">练习当前筛选</button><button id="practice-paper" class="secondary">整卷练习</button></div></div><p class="caption">错题按最近一次作答判断；核验状态以题目结构完整性为依据，原题答案仍需结合来源辨别。分类可在题目详情中调整。</p><section id="questions-list" class="question-list"></section><div id="pagination" class="pagination"></div>`;
   function filters() {
     return { ...state, ...(scope !== "all" ? { [scope]: "1" } : {}) };
   }
@@ -132,6 +136,11 @@ export async function renderLibrary(root, meta, view, params) {
       state.category,
     );
   }
+  function paperOptions() {
+    const papers = meta.papers.filter(p => (!state.module || p.subject === state.module || (!p.subject && !["行测","申论"].includes(state.module))) && (!state.kind || p.kind === state.kind) && (!state.exam_level || p.exam_level === state.exam_level) && (!state.year || String(p.year) === String(state.year)));
+    if (!papers.some(p => p.id === state.paper_id)) state.paper_id = "";
+    $("[name=paper_id]",root).innerHTML = options(papers.map(p => [p.id,p.title]),state.paper_id);
+  }
   async function load() {
     const n = ++seq;
     const d = await api("/api/questions?" + query(filters()));
@@ -140,7 +149,7 @@ export async function renderLibrary(root, meta, view, params) {
       ? d.items
           .map(
             (q) =>
-              `<article class="card question-preview"><div class="question-meta"><span class="badge">${esc(q.module)}</span><span>${esc(q.category)}</span><span class="muted">${q.year || ""} · 第${q.number}题 · ${q.type === "multiple" ? "多选" : "单选"}</span>${q.quality === "review" ? '<span class="badge warn">待核验</span>' : ""}${q.last_correct === 0 ? '<span class="badge wrong">错题</span>' : ""}</div><button class="question-title" data-id="${esc(q.id)}">${esc(q.stem.replace(/\[\[image:[^\]]+\]\]/g, "[题图]").slice(0, 220))}</button><div class="question-bottom"><span>${esc(q.source)}</span><button class="quiet favorite" data-favorite="${esc(q.id)}" data-value="${q.favorite}">${q.favorite ? "★ 已收藏" : "☆ 收藏"}</button></div></article>`,
+              `<article class="card question-preview"><div class="question-meta"><span class="badge">${esc(q.module)}</span><span>${esc(q.category)}</span><span class="muted">${q.year || ""} · 第${q.number}题 · ${q.type === "essay" ? "申论主观题" : q.type === "multiple" ? "多选" : "单选"}</span>${q.quality === "review" ? '<span class="badge warn">待核验</span>' : ""}${q.last_correct === 0 ? '<span class="badge wrong">错题</span>' : ""}</div><button class="question-title" data-id="${esc(q.id)}">${esc(q.stem.replace(/\[\[image:[^\]]+\]\]/g, "[题图]").slice(0, 220))}</button><div class="question-bottom"><span>${esc(q.source)}</span><button class="quiet favorite" data-favorite="${esc(q.id)}" data-value="${q.favorite}">${q.favorite ? "★ 已收藏" : "☆ 收藏"}</button></div></article>`,
           )
           .join("")
       : `<div class="card empty"><h2>${scope === "wrong" ? "暂时没有待复习错题" : "没有符合条件的题目"}</h2><p>调整筛选，或开始一次新的练习。</p></div>`;
@@ -168,6 +177,7 @@ export async function renderLibrary(root, meta, view, params) {
     });
   }
   facets();
+  paperOptions();
   $$("#library-filters select", root).forEach(
     (e) =>
       (e.onchange = handle(async () => {
@@ -177,6 +187,7 @@ export async function renderLibrary(root, meta, view, params) {
           state.category = "";
           facets();
         }
+        paperOptions();
         await load();
       })),
   );
@@ -200,6 +211,7 @@ export async function renderLibrary(root, meta, view, params) {
         $$("[data-scope]", root).forEach((x) =>
           x.classList.toggle("selected", x === b),
         );
+        paperOptions();
         await load();
       })),
   );
@@ -212,5 +224,9 @@ export async function renderLibrary(root, meta, view, params) {
         scope === "wrong" ? "错题复习" : `${state.module || "综合"}专项练习`,
     }),
   );
+  $("#practice-paper", root).onclick = handle(() => {
+    if (!state.paper_id) return toast("请先选择一套试卷");
+    return startPractice({filters:{paper_id:state.paper_id},mode:"exam",shuffle:false,title:meta.papers.find(p=>p.id===state.paper_id).title});
+  });
   await load();
 }

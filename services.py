@@ -10,6 +10,10 @@ def where(filters,alias='q'):
     clauses=[]; values=[]
     for key in ('module','category','topic','paper_id','quality','type','year'):
         if filters.get(key): clauses.append(f'{alias}.{key}=?'); values.append(filters[key])
+    for key in ('kind','exam_level'):
+        if filters.get(key):
+            clauses.append(f'EXISTS(SELECT 1 FROM papers p WHERE p.id={alias}.paper_id AND p.{key}=?)')
+            values.append(filters[key])
     if filters.get('tag'):
         clauses.append(f'EXISTS(SELECT 1 FROM json_each({alias}.tags) WHERE value=?)'); values.append(filters['tag'])
     if filters.get('search'):
@@ -93,14 +97,19 @@ def answer(sid,data):
     session=get_session(sid); qid=data.get('question_id')
     if qid not in session['question_ids']: raise ValueError('该题不在本次练习中')
     selected=data.get('selected')
-    if not isinstance(selected,list) or not selected: raise ValueError('请先选择答案')
     q=get_question(qid,True)
-    if any(not isinstance(x,str) or x not in q['options'] for x in selected): raise ValueError('选项无效')
-    selected=sorted(set(selected))
-    if q['type']=='single' and len(selected)!=1: raise ValueError('单选题只能选一个选项')
+    if q['type']=='essay':
+        if not isinstance(selected,list) or len(selected)!=1 or not isinstance(selected[0],str) or not selected[0].strip():
+            raise ValueError('请先填写作答内容')
+        if len(selected[0])>30000: raise ValueError('单题作答最多30000字')
+    else:
+        if not isinstance(selected,list) or not selected: raise ValueError('请先选择答案')
+        if any(not isinstance(x,str) or x not in q['options'] for x in selected): raise ValueError('选项无效')
+        selected=sorted(set(selected))
+        if q['type']=='single' and len(selected)!=1: raise ValueError('单选题只能选一个选项')
     elapsed=int(data.get('elapsed_ms',0))
     if not 0<=elapsed<=7200000: raise ValueError('用时超出有效范围')
-    correct=int(selected==sorted(q['answer'])) if q['answer'] and q['quality']=='ready' else None
+    correct=int(selected==sorted(q['answer'])) if q['type']!='essay' and q['answer'] and q['quality']=='ready' else None
     with connect() as c:
         c.execute('BEGIN IMMEDIATE')
         exists=c.execute('SELECT * FROM attempts WHERE session_id=? AND question_id=?',(sid,qid)).fetchone()
@@ -110,7 +119,7 @@ def answer(sid,data):
             if session['status']!='active': raise ValueError('练习已结束')
             first=not c.execute('SELECT 1 FROM attempts WHERE question_id=? LIMIT 1',(qid,)).fetchone()
             c.execute('INSERT INTO attempts(question_id,session_id,selected,correct,elapsed_ms,created_at,is_first,mode,answer_snapshot) VALUES(?,?,?,?,?,?,?,?,?)',
-                (qid,sid,json.dumps(selected),correct,elapsed,now(),int(first),session['mode'],json.dumps(q['answer'])))
+                (qid,sid,json.dumps(selected),correct,elapsed,now(),int(first),session['mode'],json.dumps([q['explanation']] if q['type']=='essay' else q['answer'])))
     return {'correct':correct,'selected':selected,'answer':q['answer'],'explanation':q['explanation'],'duplicate':bool(exists)}
 
 def mark(qid,data):

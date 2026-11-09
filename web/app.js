@@ -33,15 +33,15 @@ async function home(root, meta) {
     )
       .sort(
         ([a], [b]) =>
-          ["计算机专业", "经济金融基础", "英语", "行测"].indexOf(a) -
-          ["计算机专业", "经济金融基础", "英语", "行测"].indexOf(b),
+          ["计算机专业", "经济金融基础", "英语", "行测", "申论"].indexOf(a) -
+          ["计算机专业", "经济金融基础", "英语", "行测", "申论"].indexOf(b),
       )
       .map(
         ([m, n], i) =>
           `<button class="card module-card" data-module="${esc(m)}"><span class="module-index">0${i + 1}</span><h3>${esc(m)}</h3><p>${n} 道可练习题</p><span class="arrow">↗</span></button>`,
       )
       .join("")}</section>
-<div class="section-title"><h2>真题试卷</h2><a href="#library" class="text-link">查看全部题目 →</a></div><section class="paper-grid">${meta.papers.map((p) => `<article class="card paper-card"><div class="paper-year">${p.year || "导入"}</div><div><h3>${esc(p.title)}</h3><p>${p.total} 道原题 · ${p.ready} 道可练习 · 建议 ${p.duration_minutes} 分钟</p>${p.total > p.ready ? `<small class="warning-text">${p.total - p.ready} 道待核验，组卷时跳过</small>` : ""}</div><button class="secondary" data-paper="${esc(p.id)}">整卷练习</button></article>`).join("")}</section>
+<div class="section-title"><h2>近期真题</h2><a href="#library" class="text-link">筛选全部试卷与题目 →</a></div><section class="paper-grid">${meta.papers.filter(p => !["国考模拟题","申论小模考"].includes(p.kind)).slice(0,12).map((p) => `<article class="card paper-card"><div class="paper-year">${p.year || "导入"}</div><div><h3>${esc(p.title)}</h3><p>${p.total} 道原题 · ${p.ready} 道可练习 · 建议 ${p.duration_minutes} 分钟</p>${p.total > p.ready ? `<small class="warning-text">${p.total - p.ready} 道待核验，组卷时跳过</small>` : ""}</div><button class="secondary" data-paper="${esc(p.id)}">整卷练习</button></article>`).join("")}</section>
 ${meta.sessions.length ? `<div class="section-title"><h2>最近练习</h2></div><div class="card session-list">${meta.sessions.map((s) => `<a href="#practice/${s.id}"><div><strong>${esc(s.title)}</strong><small>${s.created_at.slice(0, 16).replace("T", " ")} · ${s.total} 道题</small></div><span>${s.status === "completed" ? "查看复盘" : "继续练习"} →</span></a>`).join("")}</div>` : ""}`;
   root
     .querySelectorAll("[data-module]")

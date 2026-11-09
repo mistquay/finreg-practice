@@ -85,11 +85,12 @@ def normalize(payload):
 def validate_question(q):
     for key in ('stem','module','category','topic','type','quality'):
         if not isinstance(q.get(key),str) or not q[key].strip(): raise ValueError(f'题目字段 {key} 必须填写')
-    if q['type'] not in ('single','multiple') or q['quality'] not in ('ready','review'): raise ValueError('题型或核验状态无效')
+    if q['type'] not in ('single','multiple','essay') or q['quality'] not in ('ready','review'): raise ValueError('题型或核验状态无效')
     if not isinstance(q.get('options'),dict) or not all(re.fullmatch('[A-H]',k) and isinstance(v,str) for k,v in q['options'].items()): raise ValueError('选项必须是 A-H 为键的文本对象')
     if not isinstance(q.get('answer'),list) or any(a not in q['options'] for a in q['answer']): raise ValueError('参考答案不在选项内')
     if len(set(q['answer']))!=len(q['answer']): raise ValueError('答案包含重复选项')
-    if q['quality']=='ready':
+    if q['type']=='essay' and (q['options'] or q['answer']): raise ValueError('申论题应使用文字参考解析，不能填写选项答案')
+    if q['quality']=='ready' and q['type']!='essay':
         if len(q['options'])<2 or not q['answer'] or any(not v.strip() for v in q['options'].values()): raise ValueError('可练习题目必须具备完整选项和答案')
         if q['type']=='single' and len(q['answer'])!=1: raise ValueError('单选题必须只有一个参考答案')
     for key in ('tags','issues'):

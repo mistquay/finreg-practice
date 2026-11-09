@@ -1648,3 +1648,6 @@ dialog::backdrop {
     scroll-behavior: auto !important;
   }
 }
+
+.number-grid button.answered { background: #e4e9ed; color: #364953; border-color: #b7c4cd; }
+#essay-answer { line-height: 1.9; resize: vertical; min-height: 280px; }
