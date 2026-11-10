@@ -26,11 +26,12 @@ finreg-practice/
 ```bash
 mkdir -p data
 sudo chown -R 1000:1000 ./data
+sudo chmod -R u+rwX ./data
 docker compose pull
 docker compose up -d
 ```
 
-容器以 UID/GID 1000 运行，因此第一次部署需要给数据目录写权限。查看状态与日志：
+容器以 UID/GID 1000 运行，因此第一次部署需要给数据目录和已有文件读写权限。Compose 禁止自动创建宿主机数据目录；未执行上述准备步骤时会直接报告挂载目录不存在，避免 Docker 自动创建 root 所有的目录后导致应用反复重启。查看状态与日志：
 
 ```bash
 docker compose ps
@@ -39,6 +40,31 @@ curl -f http://127.0.0.1:8765/healthz
 ```
 
 健康检查返回 `{"status":"ok"}` 表示启动完成。新目录会自动创建空数据库，可以从页面导入题库。数据库、题图和原卷均保存在 `./data`，更新或重建容器后继续使用。
+
+### SQLite 报错 `unable to open database file`
+
+如果容器反复退出且日志指向 `sqlite3.connect`，先检查服务器的数据目录及数据库文件权限。旧版 Compose 的短格式挂载 `./data:/app/data` 会在目录不存在时自动创建 root 所有的目录；从其他账号复制来的数据库也可能不可写。镜像内对 `/app/data` 设置的所有者会被宿主机挂载覆盖，宿主机登录账号为 UID 1000 并不代表该目录或文件属于 UID 1000。
+
+在 `compose.yaml` 所在目录执行以下命令修复现有部署，无需更新镜像：
+
+```bash
+docker compose stop app
+mkdir -p ./data
+sudo chown -R 1000:1000 ./data
+sudo chmod -R u+rwX ./data
+docker compose up -d
+docker compose logs --tail=50 app
+curl -f http://127.0.0.1:8765/healthz
+```
+
+使用 `docker-compose` 命令的服务器，将上述 `docker compose` 替换为 `docker-compose` 即可。SQLite 还需要在同目录创建 `practice.sqlite3-wal` 和 `practice.sqlite3-shm`，因此目录和已有数据库文件都必须可写。
+
+如果修复后仍失败，执行下面的只读诊断，确认实际挂载路径、运行用户及权限；检查 `practice.sqlite3` 是否被误建成了目录：
+
+```bash
+docker compose run --rm --no-deps --entrypoint sh app -c \
+  'id; ls -ldn /app/data; ls -ln /app/data/practice.sqlite3*; test -w /app/data && echo data-directory-writable'
+```
 
 ## 外部 Nginx
 
@@ -59,7 +85,7 @@ location / {
 
 镜像不包含本地私人题库和学习数据。迁移时将数据库 `practice.sqlite3`、题图目录 `assets`、原卷目录 `sources` 放到服务器的 `./data` 中。
 
-数据库可从页面“下载数据库备份”取得并重命名；也可停止原服务后复制，避免遗漏 SQLite WAL 中尚未合并的修改。替换服务器数据前执行 `docker compose stop`，复制完成后运行 `sudo chown -R 1000:1000 ./data`、`docker compose up -d`。
+数据库可从页面“下载数据库备份”取得并重命名；也可停止原服务后复制，避免遗漏 SQLite WAL 中尚未合并的修改。替换服务器数据前执行 `docker compose stop`，复制完成后运行 `sudo chown -R 1000:1000 ./data`、`sudo chmod -R u+rwX ./data`、`docker compose up -d`。
 
 数据库包含作答、成绩、收藏、笔记和已同步的草稿。浏览器本地尚未保存的草稿应先完成同步。采集 Cookie、`session.private.json` 和 QA 数据库无需迁移。
 
@@ -96,6 +122,6 @@ docker compose up -d
 
 ## 验证范围
 
-本地验证覆盖反向代理域名下的读取和写入、空库启动、导入、持久化路径与 SQLite 完整性。CI 烟测使用外部域名的 Host/Origin 请求，并检查重启后的题库、收藏、笔记和成绩。
+本地验证覆盖反向代理域名下的读取和写入、空库启动、导入、持久化路径与 SQLite 完整性。CI 烟测使用与服务器相同的宿主机目录挂载，先将目录所有者设为 UID/GID 1000，再使用外部域名的 Host/Origin 请求，检查重启后的题库、收藏、笔记和成绩。
 
 本机没有 Docker 引擎；本地原生 Python 的重启烟测和工作流静态检查不代表 Docker 镜像已构建。实际构建、容器烟测和多架构发布需要推送后由 GitHub Actions 执行。

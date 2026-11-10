@@ -9,7 +9,13 @@ services:
     ports:
       - "8765:8765"
     volumes:
-      - ./data:/app/data
+      # 先按部署说明创建 data 并赋予 UID/GID 1000 写权限。
+      # 禁止 Docker 自动创建 root 所有的目录，避免 SQLite 启动失败。
+      - type: bind
+        source: ./data
+        target: /app/data
+        bind:
+          create_host_path: false
     stop_grace_period: 30s
     logging:
       driver: json-file

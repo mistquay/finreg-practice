@@ -21,6 +21,8 @@ cd D:\project\finreg-practice
 
 `data` 整体挂载持久化，镜像不包含本地题库和学习数据。迁移现有数据库、题图、原卷、目录权限、反向代理、私有镜像登录与更新方式见 [Docker 部署说明](docs/docker-deployment.md)。
 
+容器使用 UID/GID `1000:1000`。首次启动前执行 `mkdir -p data`、`sudo chown -R 1000:1000 ./data`、`sudo chmod -R u+rwX ./data`，确保数据目录和已有数据库可写；否则可能报 `sqlite3.OperationalError: unable to open database file`。Compose 要求宿主机数据目录已经存在。
+
 ## 当前题库
 
 | 来源 | 套数 | 卷内题次 | 可练习 | 待核验 |

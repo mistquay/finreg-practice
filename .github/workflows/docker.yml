@@ -44,10 +44,10 @@ jobs:
 
       - name: Verify startup, grading and persistent data after restart
         run: |
-          docker volume create finreg-smoke-data
+          sudo install -d -m 0750 -o 1000 -g 1000 "$RUNNER_TEMP/finreg-smoke-data"
           docker run --detach --name finreg-smoke \
             --publish 127.0.0.1:18765:8765 \
-            --mount type=volume,source=finreg-smoke-data,target=/app/data \
+            --mount "type=bind,source=$RUNNER_TEMP/finreg-smoke-data,target=/app/data" \
             finreg-practice:smoke
           python scripts/smoke_container.py --phase write
           docker restart finreg-smoke
@@ -58,7 +58,6 @@ jobs:
         run: |
           docker logs finreg-smoke 2>/dev/null || true
           docker rm --force finreg-smoke 2>/dev/null || true
-          docker volume rm finreg-smoke-data 2>/dev/null || true
 
   publish:
     name: Publish amd64 and arm64 images to GHCR
