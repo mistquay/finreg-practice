@@ -76,14 +76,13 @@ class PracticeTests(unittest.TestCase):
     def test_review_rows_excluded(self):
         s=services.create_session({'mode':'exam','filters':{'paper_id':'pdf-2024'},'shuffle':False})
         self.assertNotIn('pdf-2024-086',s['question_ids']);self.assertEqual(len(s['question_ids']),117)
-    def test_http_export_backup_and_origin(self):
+    def test_http_export_backup_and_proxy(self):
         server=ThreadingHTTPServer(('127.0.0.1',0),Handler);thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start();base=f'http://127.0.0.1:{server.server_port}'
         try:
             data=json.load(urllib.request.urlopen(base+'/api/export'));self.assertEqual(len(data['papers']),9)
             backup=urllib.request.urlopen(base+'/api/backup').read();self.assertTrue(backup.startswith(b'SQLite format 3'))
-            req=urllib.request.Request(base+'/api/session',data=b'{}',headers={'Content-Type':'application/json','Origin':'https://example.com'})
-            with self.assertRaises(urllib.error.HTTPError) as ctx:urllib.request.urlopen(req)
-            self.assertEqual(ctx.exception.code,403)
+            req=urllib.request.Request(base+'/healthz',headers={'Host':'study.example','Origin':'https://study.example'})
+            with urllib.request.urlopen(req) as response:self.assertEqual(json.load(response),{'status':'ok'})
             req=urllib.request.Request(base+'/api/meta',headers={'Accept-Encoding':'gzip'})
             with urllib.request.urlopen(req) as response:
                 self.assertEqual(response.headers['Content-Encoding'],'gzip')

@@ -36,7 +36,7 @@ jobs:
           python -m unittest discover -s tests -p 'test_expanded_bank.py' -v
           python -m unittest discover -s tests -p 'test_deployment.py' -v
           npm run check
-          docker compose --env-file .env.example config --quiet
+          docker compose config --quiet
 
       - name: Build the test image
         run: docker build --tag finreg-practice:smoke .
@@ -47,7 +47,6 @@ jobs:
           docker run --detach --name finreg-smoke \
             --publish 127.0.0.1:18765:8765 \
             --mount type=volume,source=finreg-smoke-data,target=/app/data \
-            --env FINREG_ALLOWED_ORIGINS=http://127.0.0.1:18765 \
             finreg-practice:smoke
           python scripts/smoke_container.py --phase write
           docker restart finreg-smoke

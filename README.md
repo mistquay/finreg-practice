@@ -17,7 +17,7 @@ cd D:\project\finreg-practice
 
 ## Docker / 服务器部署
 
-已提供 [Dockerfile](Dockerfile)、[GitHub Actions](.github/workflows/docker.yml) 和 [Compose 配置](compose.yaml)。Actions 检查通过后发布 GHCR 的 amd64/arm64 镜像；复制 `.env.example` 为 `.env`，设置镜像名和访问来源后，可用 `docker compose pull`、`docker compose up -d` 部署。
+已提供 [Dockerfile](Dockerfile)、[GitHub Actions](.github/workflows/docker.yml) 和 [Compose 配置](compose.yaml)。Actions 检查通过后发布 GHCR 的 amd64/arm64 镜像；直接修改 `compose.yaml` 中的镜像地址和端口，准备好同级 `data` 目录后，用 `docker compose pull`、`docker compose up -d` 部署，无需 `.env` 文件。
 
 `data` 整体挂载持久化，镜像不包含本地题库和学习数据。迁移现有数据库、题图、原卷、目录权限、反向代理、私有镜像登录与更新方式见 [Docker 部署说明](docs/docker-deployment.md)。
 
@@ -98,7 +98,7 @@ python scripts/audit_fenbi_api.py
 
 页面“数据库备份”使用 SQLite backup API，支持服务运行中下载；数据库备份不含图片/PDF文件。完整迁移请停止服务后复制题库、原题与图片数据；迁移备份不要包含 `session.private.json` 等登录态文件。恢复数据库时停止服务，将备份替换为 `data/practice.sqlite3`（先保留现有数据副本），再启动。
 
-直接启动默认只监听127.0.0.1。服务器部署可以配置 `FINREG_HOST`、`FINREG_PORT` 和 `FINREG_ALLOWED_ORIGINS`；服务没有独立账号体系，公网使用应接入已有认证的代理或受控网络，详见部署说明。
+直接启动默认只监听127.0.0.1。Docker 默认映射8765端口，可在 `compose.yaml` 中直接修改。外部 Nginx 负责入口，应用无需配置可信代理或域名白名单，详见部署说明。
 
 ## 开发与验证
 

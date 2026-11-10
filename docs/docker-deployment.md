@@ -1,155 +1,101 @@
 # GitHub Actions 与 Docker Compose 部署
 
-## 镜像构建与发布
+## 服务器部署
 
-把项目推送到 GitHub，`.github/workflows/docker.yml` 会执行：
+服务器安装 Docker Engine 和 Docker Compose v2 后，将 `compose.yaml` 放到部署目录。直接编辑文件里的两处配置：
 
-1. Python 3.13 下的可移植测试、前端语法检查和 Compose 配置检查。
-2. 构建 amd64 测试镜像，验证空库启动、导入、作答、来源校验，并重启容器验证题库、收藏、笔记和成绩仍在。
-3. 检查通过后构建 `linux/amd64`、`linux/arm64` 镜像，推送到 GHCR。
+```yaml
+image: ghcr.io/yourname/finreg-practice:latest  # 换成 Actions 发布的实际镜像地址
+ports:
+  - "8765:8765"  # 左边是服务器端口，右边是容器端口
+```
 
-镜像地址自动取 GitHub 仓库的小写名称，例如仓库 `YourName/finreg-practice` 对应：
+无需 `.env` 文件。数据默认放在 `compose.yaml` 同级的 `data` 目录：
 
 ```text
-ghcr.io/yourname/finreg-practice:latest
+finreg-practice/
+  compose.yaml
+  data/
+    practice.sqlite3
+    assets/
+    sources/
 ```
 
-| 触发方式 | 发布标签 |
-| --- | --- |
-| 推送默认分支 | `latest`、`branch-分支名`、`sha-完整提交SHA` |
-| 推送其他分支 | `branch-分支名`、`sha-完整提交SHA` |
-| 推送 `v1.2.3` 这样的版本标签 | `1.2.3`、`1.2`、`sha-完整提交SHA` |
-| 手动运行 Actions | 按所选分支生成标签，默认分支才更新 `latest` |
-| Pull request | 只检查和测试镜像，不登录或推送 GHCR |
-
-Actions 的 Summary 会显示实际镜像地址、标签和 digest。发布使用 GitHub 自动提供的 `GITHUB_TOKEN`，不需要配置 Docker Hub 账号或上传个人 token。工作流声明了 `packages: write`；如果组织策略限制写入，需在仓库/组织设置允许发布。已有同名 package 的情况，还需给此仓库授予该 package 的 Actions 访问权。
-
-GHCR package 首次通常为私有。需要匿名拉取时，可在 GitHub Packages 的 package 设置中改为 public；保留私有时，在服务器使用具有 `read:packages` 权限的 GitHub PAT（classic）登录：
+在 `compose.yaml` 所在目录执行：
 
 ```bash
-docker login ghcr.io -u YOUR_GITHUB_USERNAME
-```
-
-在密码提示中输入 token，不把 token 写到 Compose、Git 仓库或命令参数中。
-
-## 服务器初次部署
-
-服务器需要 Docker Engine 与 Docker Compose v2。将 `compose.yaml`、`.env.example` 放到同一目录，例如 `/opt/finreg-practice`：
-
-```bash
-mkdir -p /opt/finreg-practice
-cd /opt/finreg-practice
-# 将这两个配置文件放到此目录后执行：
-cp .env.example .env
 mkdir -p data
-```
-
-编辑 `.env`，至少修改镜像名和实际访问来源：
-
-```dotenv
-FINREG_IMAGE=ghcr.io/yourname/finreg-practice:latest
-FINREG_BIND_ADDRESS=127.0.0.1
-FINREG_PORT=8765
-FINREG_ALLOWED_ORIGINS=https://study.example.com
-FINREG_DATA_DIR=./data
-FINREG_UID=1000
-FINREG_GID=1000
-```
-
-把示例域名替换成你自己的访问地址。`FINREG_ALLOWED_ORIGINS` 必须包含协议和非默认端口，多个来源用逗号分隔。它负责 Host/Origin 校验，不是登录认证。此应用仍是单用户共用一份学习档案；默认只绑定服务器回环地址，适合接入已有认证的反向代理、VPN 或 SSH 隧道，不能作为带独立账号的多用户服务。
-
-容器以 UID/GID 1000 运行，给数据目录写权限后启动：
-
-```bash
 sudo chown -R 1000:1000 ./data
-docker compose config --quiet
 docker compose pull
 docker compose up -d
-docker compose ps
-docker compose logs --tail=100 app
 ```
 
-如果改了 `.env` 中的 UID/GID，目录所有者也改为相同数值。容器使用 `/healthz` 健康检查；SQLite、图片和原卷全部位于持久化挂载的 `/app/data`。
-
-在服务器本机检查：
+容器以 UID/GID 1000 运行，因此第一次部署需要给数据目录写权限。查看状态与日志：
 
 ```bash
+docker compose ps
+docker compose logs --tail=100 app
 curl -f http://127.0.0.1:8765/healthz
 ```
 
-返回 `{"status":"ok"}` 表示启动完成。新的空目录会创建空题库，可以在页面导入 JSON；镜像中不包含本地私人题库、学习记录、登录 Cookie 或采集归档。
+健康检查返回 `{"status":"ok"}` 表示启动完成。新目录会自动创建空数据库，可以从页面导入题库。数据库、题图和原卷均保存在 `./data`，更新或重建容器后继续使用。
 
-## 迁移当前电脑的题库和学习记录
+## 外部 Nginx
 
-想保留当前完整题库，需要把本地数据同步到服务器的 `data` 目录，至少包括：
-
-```text
-data/
-  practice.sqlite3
-  assets/
-  sources/
-```
-
-`practice.sqlite3` 包括题目、解析、原始字段、会话、作答、收藏和笔记；`assets` 是题图，`sources` 是原卷 PDF。原始采集归档可另行保留，不是日常刷题启动的必要文件。
-
-数据库可以从页面“下载数据库备份”取得，重命名为 `practice.sqlite3`；也可以停止本机服务后复制。运行中不要只复制 SQLite 主文件，以免漏掉 WAL 中尚未合并的修改。迁移时停止服务器容器，再放入数据库与图片并设置目录所有者。不要上传 `session.private.json`、Cookie、QA 数据库和无关备份。
-
-浏览器尚未同步的草稿先让本机页面保存完成。迁移后访问地址改变，浏览器 localStorage 不会跨域迁移；已同步到 SQLite 的草稿会恢复。
-
-## 反向代理或服务器 IP 访问
-
-默认端口只在服务器本机开放。已有 Nginx HTTPS 站点可以添加以下 location，并将 `.env` 的来源设成站点的完整 HTTPS origin：
+在已有 Nginx 站点中转发到服务器的8765端口即可，应用不做 Host/Origin 白名单校验，也无需配置可信代理：
 
 ```nginx
 location / {
     proxy_pass http://127.0.0.1:8765;
     proxy_set_header Host $http_host;
-    proxy_set_header X-Forwarded-Proto $scheme;
     client_max_body_size 32m;
     proxy_read_timeout 300s;
 }
 ```
 
-这段配置放入你已有的 TLS/认证站点，不包含证书签发或账号配置。代理应保留 Host；应用不会自动信任任意转发来源。
+如果修改了 Compose 中的服务器端口，同步修改 `proxy_pass`。上例适用于 Nginx 运行在宿主机上；如果 Nginx 也是容器，使用它可访问的应用地址。
 
-仅在可信内网需要直接通过服务器 IP 访问时，可以修改 `.env`，把下面示例 IP 换成真实服务器地址：
+## 迁移现有题库
 
-```dotenv
-FINREG_BIND_ADDRESS=0.0.0.0
-FINREG_PORT=8765
-FINREG_ALLOWED_ORIGINS=http://192.0.2.10:8765
-```
+镜像不包含本地私人题库和学习数据。迁移时将数据库 `practice.sqlite3`、题图目录 `assets`、原卷目录 `sources` 放到服务器的 `./data` 中。
 
-然后执行 `docker compose up -d`。浏览器访问地址须与配置的协议、主机和端口相符。看到403时优先核对这里和代理传入的 Host，不要用通配来源关闭校验。
+数据库可从页面“下载数据库备份”取得并重命名；也可停止原服务后复制，避免遗漏 SQLite WAL 中尚未合并的修改。替换服务器数据前执行 `docker compose stop`，复制完成后运行 `sudo chown -R 1000:1000 ./data`、`docker compose up -d`。
+
+数据库包含作答、成绩、收藏、笔记和已同步的草稿。浏览器本地尚未保存的草稿应先完成同步。采集 Cookie、`session.private.json` 和 QA 数据库无需迁移。
+
+## 镜像构建与发布
+
+把项目推送到 GitHub 后，`.github/workflows/docker.yml` 会先运行可移植后端测试、前端语法检查和 Compose 检查，再构建测试镜像，验证导入、作答及容器重启后的数据持久化。检查通过后构建 `linux/amd64`、`linux/arm64` 镜像并发布到 GHCR。
+
+镜像地址取 GitHub 仓库的小写名称，例如 `YourName/finreg-practice` 对应 `ghcr.io/yourname/finreg-practice`。Actions Summary 会显示实际地址、标签和 digest。
+
+| 触发方式 | 发布标签 |
+| --- | --- |
+| 推送默认分支 | `latest`、`branch-分支名`、`sha-完整提交SHA` |
+| 推送其他分支 | `branch-分支名`、`sha-完整提交SHA` |
+| 推送 `v1.2.3` | `1.2.3`、`1.2`、`sha-完整提交SHA` |
+| 手动运行 | 按所选分支生成标签，默认分支才更新 `latest` |
+| Pull request | 只检查和测试镜像 |
+
+发布使用 GitHub 自动提供的 `GITHUB_TOKEN`。工作流已声明 `packages: write`，组织策略或已有同名 package 还需允许此仓库发布。
+
+GHCR package 首次通常为私有。可在 GitHub Packages 中改为 public；保留私有时，先在服务器执行 `docker login ghcr.io -u YOUR_GITHUB_USERNAME`，在密码提示中输入具有 `read:packages` 权限的 GitHub PAT（classic）。
 
 ## 更新、回退与本地构建
 
-更新代码推送到 GitHub，等 Actions 发布完成后：
+等待 Actions 发布完成后，在部署目录执行：
 
 ```bash
 docker compose pull
 docker compose up -d
 ```
 
-数据在宿主机目录中，重建容器会继续使用。更新后刷新原来打开的网页，加载新的前端模块。更新前建议保留数据库备份。
+回退时直接把 `compose.yaml` 的 `image` 改为旧版本标签或 Actions Summary 记录的 digest，再执行上面的命令。更新前保留数据库备份，更新后刷新页面加载新的前端。
 
-回退时把 `.env` 的 `FINREG_IMAGE` 改成以前的版本标签或 Actions Summary 中记录的 digest，再拉取启动：
+拿到完整源码时，可执行 `docker build -t finreg-practice:local .`，将 Compose 的 `image` 改为 `finreg-practice:local`，再执行 `docker compose up -d --pull never`。
 
-```dotenv
-FINREG_IMAGE=ghcr.io/yourname/finreg-practice@sha256:REPLACE_WITH_RECORDED_DIGEST
-```
+## 验证范围
 
-若服务器拿到完整源码，也可绕过 GHCR 在服务器本地构建。将 `.env` 的镜像名改为 `finreg-practice:local` 后执行：
+本地验证覆盖反向代理域名下的读取和写入、空库启动、导入、持久化路径与 SQLite 完整性。CI 烟测使用外部域名的 Host/Origin 请求，并检查重启后的题库、收藏、笔记和成绩。
 
-```bash
-docker compose build
-docker compose up -d --pull never
-```
-
-## 本次验证范围
-
-本地23项后端测试通过；另在不含私人题库的目录中，CI使用的8项测试也通过。验证包含 Host/Origin 默认拒绝与显式放行、反代和映射端口、空库启动、持久化路径、JSON 导入及 SQLite 完整性。CI的HTTP烟测脚本在原生Python进程中完成写入、进程重启与数据复查，这不替代真实Docker烟测。
-
-Actions配置通过actionlint，Compose和工作流YAML解析通过；引用的各action主版本已确认存在。前端未改变，语法检查通过。
-
-本机没有 Docker 引擎，因此不将静态检查记为镜像构建通过。真实 Docker 构建、容器重启后的持久化烟测及多架构发布由上述 Actions 执行；推送仓库并看到两个 job 成功后才算完成镜像发布。现有依赖私人本地题库的测试不在 CI 中伪造数据通过，CI 明确运行不依赖私人题库的测试及实际容器烟测。
+本机没有 Docker 引擎；本地原生 Python 的重启烟测和工作流静态检查不代表 Docker 镜像已构建。实际构建、容器烟测和多架构发布需要推送后由 GitHub Actions 执行。

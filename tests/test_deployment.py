@@ -49,36 +49,21 @@ class DeploymentTests(unittest.TestCase):
             body = json.dumps(data).encode()
         return urlopen(Request(self.base + path, data=body, headers=headers), timeout=5)
 
-    def test_origin_configuration(self):
-        self.assertEqual(app.configured_origins(" HTTPS://Study.Example:443/ ,http://192.0.2.1:8765 "),
-                         {"https://study.example", "http://192.0.2.1:8765"})
-        self.assertEqual(app.configured_origins(""), set())
-        for value in ("*", "https://*.example.com", "https://@study.example", "study.example", "ftp://study.example", "https://study.example/path",
-                      "https://user:password@study.example", "https://study.example?token=abc"):
-            with self.assertRaises(ValueError):
-                app.configured_origins(value)
-
-    def test_local_default_and_rejection_of_unknown_hosts(self):
+    def test_health_check(self):
         with self.request("/healthz") as response:
             self.assertEqual(json.load(response), {"status": "ok"})
-        for headers in ({"host": "study.example"}, {"origin": "https://untrusted.example"}):
-            with self.assertRaises(HTTPError) as error:
-                self.request("/api/meta", **headers)
-            self.assertEqual(error.exception.code, 403)
-            error.exception.close()
 
-    def test_reverse_proxy_and_published_port_origins(self):
-        self.server.allowed_origins = app.configured_origins(
-            "https://study.example,http://192.0.2.1:18765")
+    def test_reverse_proxy_reads_and_writes_without_source_configuration(self):
         for host, origin in (("study.example", "https://study.example"),
                              ("study.example:443", "https://study.example"),
                              ("192.0.2.1:18765", "http://192.0.2.1:18765")):
-            with self.request("/healthz", host=host, origin=origin) as response:
-                self.assertEqual(response.status, 200)
-        with self.assertRaises(HTTPError) as error:
-            self.request("/api/import", data={}, host="study.example", origin="https://untrusted.example")
-        self.assertEqual(error.exception.code, 403)
-        error.exception.close()
+            with self.request("/api/meta", host=host, origin=origin) as response:
+                self.assertEqual(json.load(response)["counts"]["total"], 0)
+        payload = {"title": "Proxy test", "questions": [{"stem": "选择 A", "options": ["甲", "乙"], "answer": "A"}]}
+        with self.request("/api/import", {"data": payload}, host="study.example", origin="https://study.example") as response:
+            self.assertEqual(json.load(response)["added"], 1)
+        with self.request("/api/questions", host="study.example", origin="https://study.example") as response:
+            self.assertEqual(json.load(response)["total"], 1)
 
     def test_assets_and_originals_share_the_persistent_directory(self):
         for folder, name, body in (("assets", "chart.svg", b"<svg/>"), ("sources", "paper.pdf", b"%PDF-test")):

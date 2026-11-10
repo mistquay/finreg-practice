@@ -2,15 +2,15 @@
 import argparse
 import json
 import time
-from urllib.error import HTTPError, URLError
+from urllib.error import URLError
 from urllib.request import Request, urlopen
 
 BASE = "http://127.0.0.1:18765"
 NOTE = "container persistence smoke test"
 
 
-def request(path, data=None, origin=BASE):
-    headers = {"Origin": origin}
+def request(path, data=None):
+    headers = {"Host": "study.example", "Origin": "https://study.example"}
     body = None
     if data is not None:
         headers["Content-Type"] = "application/json"
@@ -46,13 +46,6 @@ def write():
     })
     assert result["correct"] == 1
     request("/api/session/" + session["id"] + "/finish", {})
-    try:
-        request("/api/session", {}, origin="https://untrusted.example")
-    except HTTPError as error:
-        assert error.code == 403
-        error.close()
-    else:
-        raise AssertionError("An unconfigured Origin was accepted")
 
 
 def verify():
