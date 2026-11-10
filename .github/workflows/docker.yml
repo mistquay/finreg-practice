@@ -35,6 +35,7 @@ jobs:
         run: |
           python -m unittest discover -s tests -p 'test_expanded_bank.py' -v
           python -m unittest discover -s tests -p 'test_deployment.py' -v
+          python -m unittest discover -s tests -p 'test_smoke_container.py' -v
           npm run check
           docker compose config --quiet
 

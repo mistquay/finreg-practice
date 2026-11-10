@@ -25,7 +25,8 @@ def wait_ready():
         try:
             assert request("/healthz") == {"status": "ok"}
             return
-        except (URLError, TimeoutError):
+        # Docker can reset an accepted connection before the app is listening.
+        except (URLError, TimeoutError, ConnectionError):
             if time.monotonic() >= deadline:
                 raise
             time.sleep(0.5)
