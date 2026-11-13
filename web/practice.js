@@ -326,9 +326,9 @@ export async function renderPractice(root, id) {
       ) +
       `
       <progress class="practice-progress" max="${session.question_ids.length}" value="${answerCount()}" aria-label="本次已作答进度"></progress>
-      <div class="practice-layout"><section class="card question-card"><div class="practice-top"><div><span class="badge">${esc(current.category)}</span><span class="muted"> 第 ${index + 1} / ${session.question_ids.length} 题 · ${current.type === "essay" ? "申论" : current.type === "multiple" ? "多选" : "单选"}</span></div><div class="toolbar"><span id="question-timer" class="timer">${duration(elapsed)}</span><button class="quiet" id="pause-btn" ${!active() ? "disabled" : ""}>${paused ? "继续计时" : "暂停"}</button></div></div>
-      <p id="save-status" class="save-status" role="status">${active() ? "进度自动保存" : "本次练习已结束"}</p>${paused && active() ? '<div class="notice">已暂停，继续计时后可以作答。</div>' : ""}
-      ${current.material ? `<details class="material" open><summary>阅读材料</summary><div class="prose">${rich(current.material)}</div></details>` : ""}<div class="prose question-stem">${rich(current.stem)}</div><div id="answer-options"></div><div id="answer-result" aria-live="polite">${resultHTML()}</div>
+      <div class="practice-layout"><section class="card question-card"><div class="practice-top"><div><span class="badge">${esc(current.category)}</span><span class="type-tag type-${esc(current.type)}">${current.type === "essay" ? "申论题" : current.type === "multiple" ? "多选题" : "单选题"}</span><span class="muted">第 ${index + 1} / ${session.question_ids.length} 题</span>${current.type === "multiple" && active() && !exam() && !result ? '<span class="type-hint">可选多项，选全后点“确认答案”</span>' : ""}<span id="save-status" class="save-status" role="status">${active() ? "进度自动保存" : "本次练习已结束"}</span></div><div class="toolbar"><span id="question-timer" class="timer">${duration(elapsed)}</span><button class="quiet" id="pause-btn" ${!active() ? "disabled" : ""}>${paused ? "继续计时" : "暂停"}</button></div></div>
+      ${paused && active() ? '<div class="notice">已暂停，继续计时后可以作答。</div>' : ""}
+      ${current.material ? `<details class="material" open><summary>阅读材料</summary><div class="prose">${rich(current.material)}</div></details>` : ""}<div class="prose question-stem">${rich(current.stem)}</div><div id="answer-options" data-type="${esc(current.type)}"></div><div id="answer-result" aria-live="polite">${resultHTML()}</div>
       <div class="practice-actions" aria-label="答题操作">${actionsHTML()}</div><p class="keyboard-hint"><kbd>A</kbd>–<kbd>H</kbd> 选择 · <kbd>Enter</kbd> 确认 / 下一题 · <kbd>←</kbd> <kbd>→</kbd> 切题</p><div class="source-row"><span>${esc(current.source)} · 原卷第${current.number}题</span>${sourceLink(current)}</div></section>
       <aside class="practice-aside"><section class="card answer-sheet ${sheetOpen ? "" : "mobile-collapsed"}"><div class="card-heading"><h3>答题卡 <small id="sheet-count">${answerCount()} / ${session.question_ids.length}</small></h3><button class="quiet mobile-sheet-toggle" id="sheet-toggle" aria-expanded="${sheetOpen}" aria-controls="answer-numbers">${sheetOpen ? "收起" : "展开"}</button></div><div class="number-grid" id="answer-numbers">${sheetHTML()}</div><div class="sheet-legend">${exam() && active() ? "描边 当前题 · 灰 已填写 · 交卷前不显示对错" : "描边 当前题 · 绿 答对 · 红 答错 · 灰 已作答"}</div><button class="secondary wide" id="finish-session">${active() ? (exam() ? "交卷并查看结果" : "结束并总结") : "查看总结"}</button></section><section class="card note-card"><button class="quiet" id="practice-favorite">${current.favorite ? "已收藏" : "收藏这道题"}</button><label class="field">我的笔记<textarea id="practice-note" rows="4" placeholder="记录知识点与错因">${esc(current.note)}</textarea></label><button class="secondary wide" id="practice-save-note">保存笔记</button></section></aside></div>`;
     paintOptions();
@@ -419,13 +419,29 @@ export async function renderPractice(root, id) {
         await show();
         if (r.correct === 1 && answerCount() === session.question_ids.length)
           summary();
-        else $("#answer-result", root).scrollIntoView({ block: "start" });
+        else revealResult();
       }
     } finally {
       busy = false;
       last = performance.now();
       if (!dead) paintOptions();
     }
+  }
+  // Bring the feedback heading and first lines into view while keeping as much of the stem visible as possible.
+  function revealResult() {
+    const box = $("#answer-result", root).getBoundingClientRect();
+    const bar = $(".practice-actions", root);
+    const covered =
+      bar && getComputedStyle(bar).position === "fixed" ? bar.offsetHeight : 0;
+    const overflow =
+      box.top + Math.min(box.height, 220) - (innerHeight - covered - 16);
+    if (overflow > 0)
+      window.scrollBy({
+        top: overflow,
+        behavior: matchMedia("(prefers-reduced-motion: reduce)").matches
+          ? "auto"
+          : "smooth",
+      });
   }
   async function move(to) {
     if (
