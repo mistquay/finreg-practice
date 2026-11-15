@@ -25,26 +25,48 @@ CREATE INDEX IF NOT EXISTS questions_scope ON questions(module, category, paper_
 CREATE INDEX IF NOT EXISTS questions_paper_quality ON questions(paper_id, quality);
 CREATE INDEX IF NOT EXISTS questions_facets ON questions(module, category, topic, quality);
 CREATE INDEX IF NOT EXISTS questions_tags ON questions(tags);
+CREATE TABLE IF NOT EXISTS users(
+    id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    password_hash TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'user', disabled INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL, last_login TEXT);
+CREATE TABLE IF NOT EXISTS auth_sessions(
+    token_hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id),
+    created_at TEXT NOT NULL, expires_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS invites(
+    code TEXT PRIMARY KEY, created_by INTEGER REFERENCES users(id), created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL, used_by INTEGER REFERENCES users(id), used_at TEXT,
+    revoked INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS sessions(
     id TEXT PRIMARY KEY, created_at TEXT NOT NULL, mode TEXT NOT NULL, title TEXT,
     question_ids TEXT NOT NULL, status TEXT DEFAULT 'active', position INTEGER DEFAULT 0,
-    drafts TEXT DEFAULT '{}');
+    drafts TEXT DEFAULT '{}', user_id INTEGER REFERENCES users(id));
 CREATE TABLE IF NOT EXISTS attempts(
     id INTEGER PRIMARY KEY AUTOINCREMENT, question_id TEXT NOT NULL REFERENCES questions(id),
     session_id TEXT REFERENCES sessions(id), selected TEXT NOT NULL, correct INTEGER,
     elapsed_ms INTEGER NOT NULL, created_at TEXT NOT NULL, is_first INTEGER NOT NULL, mode TEXT NOT NULL,
-    answer_snapshot TEXT NOT NULL, UNIQUE(session_id, question_id));
+    answer_snapshot TEXT NOT NULL, user_id INTEGER REFERENCES users(id), UNIQUE(session_id, question_id));
 CREATE INDEX IF NOT EXISTS attempts_date ON attempts(created_at);
 CREATE INDEX IF NOT EXISTS attempts_question ON attempts(question_id, id DESC);
 CREATE TABLE IF NOT EXISTS imported_documents(sha256 TEXT PRIMARY KEY, created_at TEXT NOT NULL, payload TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS marks(
-    question_id TEXT PRIMARY KEY REFERENCES questions(id), favorite INTEGER DEFAULT 0, note TEXT DEFAULT '');
+    user_id INTEGER REFERENCES users(id), question_id TEXT NOT NULL REFERENCES questions(id),
+    favorite INTEGER DEFAULT 0, note TEXT DEFAULT '', PRIMARY KEY(user_id, question_id));
+'''
+
+# Study records belong to a user. Rows from before accounts existed keep user_id NULL until the
+# first account is created, which then takes them over (see auth.create_user).
+USER_INDEXES = '''
+CREATE INDEX IF NOT EXISTS sessions_user ON sessions(user_id, created_at);
+CREATE INDEX IF NOT EXISTS attempts_user_question ON attempts(user_id, question_id, id);
+CREATE INDEX IF NOT EXISTS auth_sessions_user ON auth_sessions(user_id);
 '''
 
 # Columns added after the first release; older databases are migrated in initialize().
 MIGRATIONS = {
     'papers': {name: "TEXT NOT NULL DEFAULT ''" for name in ('subject', 'kind', 'exam_level')},
     'questions': {'edited': 'INTEGER NOT NULL DEFAULT 0'},
+    'sessions': {'user_id': 'INTEGER REFERENCES users(id)'},
+    'attempts': {'user_id': 'INTEGER REFERENCES users(id)'},
 }
 
 JSON_FIELDS = ('options', 'answer', 'tags', 'issues', 'raw')
@@ -132,6 +154,16 @@ def initialize():
             for name, definition in columns.items():
                 if name not in existing:
                     conn.execute(f'ALTER TABLE {table} ADD COLUMN {name} {definition}')
+        if 'user_id' not in {r[1] for r in conn.execute('PRAGMA table_info(marks)')}:
+            # Favorites and notes were keyed by question alone; rebuild them keyed by (user, question).
+            conn.executescript('''ALTER TABLE marks RENAME TO marks_legacy;
+                CREATE TABLE marks(user_id INTEGER REFERENCES users(id),
+                    question_id TEXT NOT NULL REFERENCES questions(id), favorite INTEGER DEFAULT 0,
+                    note TEXT DEFAULT '', PRIMARY KEY(user_id, question_id));
+                INSERT INTO marks(user_id, question_id, favorite, note)
+                    SELECT NULL, question_id, favorite, note FROM marks_legacy;
+                DROP TABLE marks_legacy;''')
+        conn.executescript(USER_INDEXES)
         # Seed from the rebuildable bank files on first start; papers already stored are left alone.
         for bank in (ROOT / 'data/bank.json', ROOT / 'data/fenbi-bank.json'):
             if not bank.exists():

@@ -41,6 +41,22 @@ curl -f http://127.0.0.1:8765/healthz
 
 健康检查返回 `{"status":"ok"}` 表示启动完成。新目录会自动创建空数据库，可以从页面导入题库。数据库、题图和原卷均保存在 `./data`，更新或重建容器后继续使用。
 
+### 首次登录
+
+应用要求登录。还没有任何账号时，启动日志会打印一次性初始化码：
+
+```bash
+docker compose logs app | grep 初始化码
+```
+
+打开网站，用初始化码创建管理员账号。从旧版本升级时，已有的练习、作答、收藏和笔记会全部归入这个账号。初始化码在每次重启时重新生成，创建第一个账号后失效；也可以在 `compose.yaml` 的 `environment` 中设置 `FINREG_SETUP_CODE` 指定。之后由管理员在“用户管理”中生成邀请码邀请其他人注册。
+
+管理员忘记密码时：
+
+```bash
+docker compose exec app python auth.py reset-password 用户名
+```
+
 ### SQLite 报错 `unable to open database file`
 
 如果容器反复退出且日志指向 `sqlite3.connect`，先检查服务器的数据目录及数据库文件权限。旧版 Compose 的短格式挂载 `./data:/app/data` 会在目录不存在时自动创建 root 所有的目录；从其他账号复制来的数据库也可能不可写。镜像内对 `/app/data` 设置的所有者会被宿主机挂载覆盖，宿主机登录账号为 UID 1000 并不代表该目录或文件属于 UID 1000。
@@ -74,10 +90,13 @@ docker compose run --rm --no-deps --entrypoint sh app -c \
 location / {
     proxy_pass http://127.0.0.1:8765;
     proxy_set_header Host $http_host;
+    proxy_set_header X-Forwarded-Proto $scheme;
     client_max_body_size 32m;
     proxy_read_timeout 300s;
 }
 ```
+
+`X-Forwarded-Proto` 让应用在 HTTPS 下给登录 Cookie 加上 Secure 标记。公网访问请务必启用 HTTPS，否则密码和登录凭据以明文传输。
 
 如果修改了 Compose 中的服务器端口，同步修改 `proxy_pass`。上例适用于 Nginx 运行在宿主机上；如果 Nginx 也是容器，使用它可访问的应用地址。
 

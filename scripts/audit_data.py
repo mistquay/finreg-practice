@@ -2,11 +2,12 @@
 import sys,json,re
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-import database,services
+import database
 
 def audit():
     with database.connect() as conn:
         questions=[database.decode(q) for q in conn.execute('SELECT * FROM questions')]
+        personal_attempts=conn.execute('SELECT count(*) FROM attempts').fetchone()[0]
     fenbi=[q for q in questions if q['provider']=='fenbi']
     missing=[]
     for q in questions:
@@ -14,8 +15,8 @@ def audit():
             if not (database.ROOT/'data'/url.lstrip('/')).is_file():missing.append({'id':q['id'],'url':url})
     catalog=database.ROOT/'data/fenbi/keypoint-catalog.json'
     report={
-        'counts':services.metadata()['counts'],
-        'personal_attempts':services.statistics({'days':'0'})['summary']['count'],
+        'counts':{'total':len(questions),'ready':sum(q['quality']=='ready' for q in questions),'review':sum(q['quality']=='review' for q in questions)},
+        'personal_attempts':personal_attempts,
         'fenbi_questions':len(fenbi),
         'with_platform_statistics':sum(bool(q['raw'].get('platform_statistics')) for q in fenbi),
         'with_keypoints':sum(bool(q['raw'].get('keypoints')) for q in fenbi),

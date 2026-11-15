@@ -18,6 +18,7 @@ import {
   num,
   cascadeFacets,
   debounced,
+  isAdmin,
 } from "./ui.js";
 export async function questionDetail(id) {
   const q = await api("/api/question/" + encodeURIComponent(id) + "?answer=1");
@@ -28,7 +29,7 @@ export async function questionDetail(id) {
       .map(([k, v]) => `<p><b>${k}.</b> ${rich(v)}</p>`)
       .join(
         "",
-      )}</div><div class="answer-box"><strong>来源参考答案：${q.type === "essay" ? "见下方文字解析" : q.answer.join("、") || "未提供"}</strong><div class="prose">${rich(q.explanation) || "来源暂未提供文字解析。请结合原卷或课程核对。"}</div></div><p>${sourceLink(q)}</p><div class="toolbar"><button id="detail-favorite" class="secondary">${q.favorite ? "取消收藏" : "收藏题目"}</button><button id="detail-edit" class="secondary">编辑 / 核验</button></div><label class="field">我的笔记<textarea id="detail-note" rows="3" placeholder="停止输入后自动保存">${esc(q.note)}</textarea></label><button id="save-note" class="primary">保存笔记</button>${q.provider ? `<details class="raw"><summary>来源字段 · ${esc(q.provider)} / ${esc(q.external_id)} · 难度 ${q.difficulty ?? "未提供"}</summary><p class="caption">完整原始业务字段保存在本地，未用到的字段也会保留。${q.raw?.platform_statistics?.totalCount != null ? `粉笔平台作答量 ${q.raw.platform_statistics.totalCount} 次，平台正确率 ${Number(q.raw.platform_statistics.correctRatio).toFixed(1)}%（采集时快照，与个人统计分开）。` : ""}</p><pre>${esc(JSON.stringify(q.raw, null, 2))}</pre></details>` : ""}`,
+      )}</div><div class="answer-box"><strong>来源参考答案：${q.type === "essay" ? "见下方文字解析" : q.answer.join("、") || "未提供"}</strong><div class="prose">${rich(q.explanation) || "来源暂未提供文字解析。请结合原卷或课程核对。"}</div></div><p>${sourceLink(q)}</p><div class="toolbar"><button id="detail-favorite" class="secondary">${q.favorite ? "取消收藏" : "收藏题目"}</button>${isAdmin() ? '<button id="detail-edit" class="secondary">编辑 / 核验</button>' : ""}</div><label class="field">我的笔记<textarea id="detail-note" rows="3" placeholder="停止输入后自动保存">${esc(q.note)}</textarea></label><button id="save-note" class="primary">保存笔记</button>${q.provider ? `<details class="raw"><summary>来源字段 · ${esc(q.provider)} / ${esc(q.external_id)} · 难度 ${q.difficulty ?? "未提供"}</summary><p class="caption">完整原始业务字段保存在本地，未用到的字段也会保留。${q.raw?.platform_statistics?.totalCount != null ? `粉笔平台作答量 ${q.raw.platform_statistics.totalCount} 次，平台正确率 ${Number(q.raw.platform_statistics.correctRatio).toFixed(1)}%（采集时快照，与个人统计分开）。` : ""}</p><pre>${esc(JSON.stringify(q.raw, null, 2))}</pre></details>` : ""}`,
   );
   $("#detail-favorite", d).onclick = handle(async (e) => {
     const v = await api("/api/mark/" + id, { favorite: !q.favorite });
@@ -51,7 +52,8 @@ export async function questionDetail(id) {
     await saveNote();
     toast("笔记已保存");
   });
-  $("#detail-edit", d).onclick = () => edit(q, d);
+  const editButton = $("#detail-edit", d);
+  if (editButton) editButton.onclick = () => edit(q, d);
 }
 function edit(q, d) {
   d.innerHTML = `<button class="dialog-close secondary" aria-label="关闭">×</button><h2>编辑与核验题目</h2><p class="caption">核验请以原卷为依据。保存会更新题目；历史作答仍保留当时的答案快照与判分。</p><p>${sourceLink(q)}</p><form id="edit-form"><label class="field">题干<textarea name="stem" rows="4" required>${esc(q.stem)}</textarea></label><label class="field">选项（每行 A=选项内容）<textarea name="options" rows="7">${esc(

@@ -30,11 +30,12 @@
         <a href="#library" data-route="library" data-icon="book">我的题库</a>
         <a href="#review" data-route="review" data-icon="bookmark">错题收藏</a>
         <a href="#stats" data-route="stats" data-icon="chart">学习统计</a>
-        <a href="#data" data-route="data" data-icon="database">数据管理</a>
+        <a href="#data" data-route="data" data-icon="database" data-admin hidden>数据管理</a>
+        <a href="#users" data-route="users" data-icon="users" data-admin hidden>用户管理</a>
       </nav>
       <div class="sidebar-foot">
-        <span class="dot"></span>本地学习档案<small
-          >题目与记录，留在你的电脑。</small
+        <span class="dot"></span>个人学习档案<small
+          >作答、收藏与笔记只有自己可见。</small
         >
       </div>
     </aside>
@@ -44,7 +45,7 @@
           我的备考空间 <span>/</span> <strong id="route-name">学习中心</strong>
         </div>
         <div>
-          <span class="local-chip"><span class="dot"></span>本地运行</span
+          <button class="account-chip" id="account-button" hidden aria-haspopup="dialog"><span class="avatar" id="account-initial" aria-hidden="true"></span><span id="account-name"></span></button
           ><time id="today"></time>
         </div>
       </header>
@@ -53,7 +54,7 @@
       </main>
       <footer class="footnote">
         <span>知序 · 每一次练习，都有迹可循</span
-        ><span>本地保存 · 来源可追溯</span>
+        ><span>个人档案 · 来源可追溯</span>
       </footer>
     </div>
     <div id="toast" role="status" aria-live="polite"></div>

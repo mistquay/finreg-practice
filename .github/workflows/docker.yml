@@ -47,6 +47,7 @@ jobs:
           sudo install -d -m 0750 -o 1000 -g 1000 "$RUNNER_TEMP/finreg-smoke-data"
           docker run --detach --name finreg-smoke \
             --publish 127.0.0.1:18765:8765 \
+            --env FINREG_SETUP_CODE=SMOKE-TEST-CODE \
             --mount "type=bind,source=$RUNNER_TEMP/finreg-smoke-data,target=/app/data" \
             finreg-practice:smoke
           python scripts/smoke_container.py --phase write

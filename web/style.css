@@ -1560,6 +1560,7 @@ kbd {
   min-height: 260px;
 }
 .table-scroll {
+  position: relative; /* keeps absolutely positioned labels inside the scroll area */
   overflow-x: auto;
 }
 table {
@@ -2471,5 +2472,202 @@ dialog::backdrop {
 @media (max-width: 760px) {
   .library-toolbar #practice-current {
     grid-column: 1 / -1;
+  }
+}
+/* Accounts: sign-in screen, account chip and dialog, user administration. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+body.is-auth .sidebar,
+body.is-auth .topbar,
+body.is-auth .footnote {
+  display: none;
+}
+body.is-auth .shell {
+  margin-left: 0;
+  padding: 0;
+}
+body.is-auth #app {
+  max-width: none;
+  padding: 0;
+}
+.auth-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 40px 16px;
+}
+.auth-card {
+  width: min(420px, 100%);
+  padding: 32px 32px 26px;
+}
+.auth-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 28px;
+  font-size: 22px;
+  font-weight: 650;
+}
+.auth-brand small {
+  display: block;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
+}
+.auth-card h1 {
+  font-size: 22px;
+}
+.auth-lead {
+  margin-top: 6px;
+  font-size: 13px;
+}
+#auth-form,
+.password-form {
+  display: grid;
+  gap: 14px;
+  margin-top: 22px;
+}
+#auth-form .primary {
+  width: 100%;
+  margin-top: 4px;
+}
+.form-error {
+  padding: 9px 12px;
+  border-radius: 8px;
+  background: var(--red-soft);
+  color: var(--red);
+  font-size: 13px;
+}
+.auth-switch,
+.auth-help {
+  margin-top: 16px;
+  font-size: 13px;
+  text-align: center;
+}
+.auth-switch .text-link {
+  margin-left: 4px;
+}
+.account-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 3px 10px 3px 3px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--card);
+  font-size: 13px;
+}
+.account-chip:hover {
+  border-color: #aebda6;
+}
+.avatar {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--blue-soft);
+  color: var(--blue);
+  font-weight: 650;
+  font-size: 13px;
+}
+.avatar.large {
+  width: 48px;
+  height: 48px;
+  font-size: 20px;
+}
+.account-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.account-actions {
+  margin-top: 20px;
+}
+.password-form {
+  border-top: 1px solid var(--line);
+  padding-top: 20px;
+}
+.password-form h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.admin-card {
+  margin-top: 20px;
+}
+.admin-card table td,
+.admin-card table th {
+  padding: 12px 18px;
+  vertical-align: middle;
+}
+.row-actions {
+  display: flex;
+  gap: 2px;
+}
+.row-actions .quiet {
+  padding: 6px 10px;
+  min-height: 36px;
+}
+.quiet.danger {
+  color: var(--red);
+}
+.quiet.danger:hover {
+  background: var(--red-soft);
+}
+.pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #faf2df;
+  color: var(--amber);
+  font-size: 12px;
+}
+.pill.done {
+  background: var(--teal-soft);
+  color: var(--teal);
+}
+.pill.muted {
+  background: #eceee9;
+  color: var(--muted);
+}
+.invite-code,
+.invite-copy input {
+  font-family: Consolas, "Cascadia Mono", monospace;
+  letter-spacing: 0.06em;
+}
+.invite-copy {
+  display: flex;
+  gap: 10px;
+  margin: 12px 0 8px;
+  flex-wrap: wrap;
+}
+.invite-copy input {
+  flex: 1;
+  min-width: 200px;
+  font-size: 18px;
+}
+.empty-line {
+  padding: 20px 22px;
+  font-size: 13px;
+}
+@media (max-width: 760px) {
+  .auth-card {
+    padding: 26px 20px 22px;
+  }
+  .account-chip {
+    min-height: 32px;
+    font-size: 12px;
+  }
+  .avatar {
+    width: 24px;
+    height: 24px;
   }
 }

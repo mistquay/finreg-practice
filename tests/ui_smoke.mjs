@@ -113,8 +113,20 @@ const payload = {
     },
   ],
 };
+// The QA server is started with FINREG_SETUP_CODE so the first admin can be created here.
+const setupCode = process.env.FINREG_SETUP_CODE || "UIQA-SETUP-CODE";
+const admin = { username: "qa-admin", password: "qa-admin-password" };
+async function signIn() {
+  const me = await request("/api/auth/me");
+  if (me.user) return;
+  await request(
+    me.setup ? "/api/auth/register" : "/api/auth/login",
+    me.setup ? { ...admin, code: setupCode } : admin,
+  );
+}
 let practice, exam;
 try {
+  await signIn();
   await request("/api/import", { data: payload });
   await check(
     "practice: no meta prerequisite, correct single auto advances, wrong single stays",
@@ -379,6 +391,60 @@ try {
     },
   );
   await check(
+    "accounts: sign-in errors, invite registration, private records, admin-only pages, sign-out",
+    async () => {
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await open("users", "#new-invite");
+      await page.locator("#new-invite").click();
+      const code = await page.locator("#fresh-code").inputValue();
+      assert.match(code, /^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/);
+      const guest = await browser.newContext({ viewport: { width: 390, height: 844 } });
+      const friend = await guest.newPage();
+      friend.on("pageerror", (e) => errors.push(e.message));
+      try {
+        await friend.goto(`${base}/#home`);
+        await friend.locator("#auth-form").waitFor();
+        assert.equal((await friend.request.get(`${base}/api/meta`)).status(), 401);
+        await friend.locator("[name=username]").fill(admin.username);
+        await friend.locator("[name=password]").fill("wrong-password");
+        await friend.locator("#auth-form button[type=submit]").click();
+        await friend.locator(".form-error:not([hidden])").waitFor();
+        await friend.locator("#auth-switch").click();
+        const name = `qa-friend-${Date.now()}`;
+        await friend.locator("[name=username]").fill(name);
+        await friend.locator("[name=password]").fill("friend-password");
+        await friend.locator("[name=confirm]").fill("friend-password");
+        await friend.locator("[name=code]").fill(code.toLowerCase());
+        await friend.locator("#auth-form button[type=submit]").click();
+        await friend.locator("#quick-start").waitFor();
+        assert.equal(await friend.locator("#account-name").innerText(), name);
+        assert.equal(await friend.locator('nav a[data-route="data"]').isHidden(), true);
+        const mine = await (await friend.request.get(`${base}/api/meta`)).json();
+        assert.equal(mine.counts.favorites, 0);
+        assert.equal(mine.sessions.length, 0);
+        assert(
+          (await request("/api/meta")).counts.favorites > 0,
+          "admin keeps their own favorites",
+        );
+        await friend.goto(`${base}/#data`);
+        await friend.locator("#quick-start").waitFor();
+        assert.equal((await friend.request.get(`${base}/api/admin/users`)).status(), 403);
+        await friend.locator("#account-button").click();
+        await friend.locator("#account-logout").click();
+        await friend.locator("#auth-form").waitFor();
+        assert.equal(
+          await friend.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1),
+          false,
+        );
+      } finally {
+        await guest.close();
+      }
+      await page.reload();
+      await page.locator("#new-invite").waitFor();
+      assert.match(await page.locator(".admin-card").last().innerText(), /qa-friend/);
+    },
+  );
+  await check(
     "all workspaces: no overflow at 1440,1024,820,768,390,320",
     async () => {
       for (const width of [1440, 1024, 820, 768, 390, 320]) {
@@ -389,6 +455,7 @@ try {
           ["review?scope=favorite", ".question-title"],
           ["stats", "#group-table"],
           ["data", "#source-search"],
+          ["users", "#new-invite"],
         ]) {
           await open(route, ready);
           assert.equal(

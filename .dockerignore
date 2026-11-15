@@ -3,6 +3,7 @@
 !Dockerfile
 !.dockerignore
 !app.py
+!auth.py
 !database.py
 !services.py
 !importer.py

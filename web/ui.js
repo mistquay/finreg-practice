@@ -13,6 +13,9 @@ export const rich = (v) =>
     /\[\[image:(\/assets\/[a-zA-Z0-9_.-]+)\]\]/g,
     '<img class="question-image" src="$1" alt="原题图表" loading="lazy">',
   );
+// The signed-in user ({id, username, role}); app.js keeps it current.
+export const account = { user: null };
+export const isAdmin = () => account.user?.role === "admin";
 export async function api(path, data) {
   const r = await fetch(
     path,
@@ -24,8 +27,15 @@ export async function api(path, data) {
           body: JSON.stringify(data),
         },
   );
-  const b = await r.json();
-  if (!r.ok) throw new Error(b.error || "请求失败");
+  const b = await r.json().catch(() => ({}));
+  // An expired or revoked login sends the app back to the sign-in screen.
+  if (r.status === 401 && !path.startsWith("/api/auth/"))
+    window.dispatchEvent(new Event("finreg:signed-out"));
+  if (!r.ok) {
+    const error = new Error(b.error || "请求失败");
+    error.status = r.status;
+    throw error;
+  }
   return b;
 }
 export const query = (o) =>

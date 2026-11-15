@@ -15,6 +15,17 @@ cd D:\project\finreg-practice
 
 首次导入已完成，当前 data 目录包含实际题库。Git 不包含私人题目和学习数据，新克隆源码后须自行提供 `data/bank.json` 或使用页面导入题库。
 
+## 账号与权限
+
+所有学习页面和接口都要先登录，只有登录页、`/healthz` 和前端静态文件不需要登录。题库所有人共用；练习、作答、错题、收藏、笔记和统计按账号隔离，互相看不到。
+
+- **第一个账号（管理员）**：还没有任何账号时，服务启动日志会打印一次性**初始化码**（直接启动看终端，Docker 用 `docker compose logs app`）。在登录页用它创建管理员。升级前已有的练习、作答、收藏和笔记会全部归入这个账号。也可以用环境变量 `FINREG_SETUP_CODE` 指定初始化码。
+- **邀请朋友**：管理员在“用户管理”里生成邀请码（一次性、7 天有效），把邀请码和网址发给朋友，朋友在登录页点“注册账号”。没有邀请码不能注册，没有开放注册。
+- **管理员权限**：数据管理（导入、导出、数据库备份）、题目编辑核验、用户管理。普通用户只能练习和管理自己的记录。管理员可以重置他人密码、停用或启用账号、设置管理员；不能停用自己或修改自己的角色。
+- **忘记密码**：没有邮箱找回。普通用户由管理员重置；管理员可在服务器上运行 `python auth.py reset-password 用户名`（Docker：`docker compose exec app python auth.py reset-password 用户名`），这会同时解除停用。`python auth.py create-user 用户名 --admin` 可直接创建账号。
+- **安全措施**：密码用 scrypt 加盐哈希保存；登录凭据是 30 天有效的 HttpOnly、SameSite=Lax Cookie，数据库只存它的哈希；经 Nginx 的 HTTPS 访问时（带 `X-Forwarded-Proto: https`）Cookie 自动加 Secure。同一用户名连续 8 次密码错误会锁定 15 分钟。写操作只接受 JSON 请求，配合 SameSite 防止跨站提交；页面带 CSP 和禁止嵌入的响应头。修改密码会让其他设备的登录失效，停用账号或重置密码会让该账号所有登录失效。
+- **公网部署**：请务必通过 HTTPS 访问，否则密码和 Cookie 会明文传输。
+
 ## Docker / 服务器部署
 
 已提供 [Dockerfile](Dockerfile)、[GitHub Actions](.github/workflows/docker.yml) 和 [Compose 配置](compose.yaml)。Actions 检查通过后发布 GHCR 的 amd64/arm64 镜像；直接修改 `compose.yaml` 中的镜像地址和端口，准备好同级 `data` 目录后，用 `docker compose pull`、`docker compose up -d` 部署，无需 `.env` 文件。
@@ -50,7 +61,8 @@ cd D:\project\finreg-practice
 - 考试模式：可反复修改答案，整卷交卷后统一判分；交卷前不记入学习统计，交卷后答题卡显示对错并可逐题复盘。专项和整卷都可以选择这两种模式。
 - 答题：支持错题回练、答题卡、暂停、自动保存草稿、笔记收藏（笔记停止输入约1秒后自动保存）、原卷页码、英语材料和本地图题；宽屏下资料分析、申论、英语阅读等材料题采用材料与题目左右分栏；练习结束后可直接“重练本次错题”；手机答题页使用固定底部操作栏，收起全局导航，支持小屏与横屏。非输入框内可用 A–H 选择、Enter 确认/下一题、方向键切题。
 - 作答统计：7/30/90天或全部时间，首次/全部作答，练习方式、模块、小类、考点、标签筛选；今日及所选周期指标、每日趋势和可排序分组表。
-- 数据：JSON导入预览、就地错误提示、去重、题目编辑核验、完整题库导出、SQLite备份、原始业务JSON保留；来源支持搜索与分页。
+- 数据（管理员）：JSON导入预览、就地错误提示、去重、题目编辑核验、完整题库导出、SQLite备份、原始业务JSON保留；来源支持搜索与分页。
+- 账号：登录、凭邀请码注册、修改密码、退出登录（右上角账号按钮）；管理员的“用户管理”页可生成和撤销邀请码、重置密码、停用账号、设置管理员。
 
 界面采用统一的暖白与松绿配色、清晰焦点和阅读字号。桌面侧栏、手机底部导航支持全部功能；答题时手机底部导航让位于答题操作。产品约束见 [PRODUCT.md](PRODUCT.md)，视觉规范见 [DESIGN.md](DESIGN.md)。
 
@@ -89,7 +101,7 @@ python scripts/audit_fenbi_api.py
 
 ## 数据保存与备份
 
-- `data/practice.sqlite3`：题库、会话、作答、收藏、笔记、题目原始字段、导入文件整份JSON。
+- `data/practice.sqlite3`：题库、账号（密码哈希）、登录会话、邀请码、各账号的会话、作答、收藏、笔记、题目原始字段、导入文件整份JSON。
 - `data/fenbi-api/`：全目录原始响应、题目补全批次、逐卷标准JSON和采集/入库/验收报告。
 - `data/raw/fenbi-api/`：新增整卷原始数据的内容摘要版本。
 - `data/raw/fenbi`：完整业务响应、材料、章节树、元信息、考点和采集清单，内容摘要区分原始版本。
@@ -98,7 +110,7 @@ python scripts/audit_fenbi_api.py
 - `data/sources`：六份原卷；`data/bank.json`、`data/fenbi-bank.json` 为可重建数据。
 - `data/qa.sqlite3`、`data/qa-expanded.sqlite3`、`data/qa-*.log`：隔离的验收档案，不是用户成绩。
 
-页面“数据库备份”使用 SQLite backup API，支持服务运行中下载；数据库备份不含图片/PDF文件。完整迁移请停止服务后复制题库、原题与图片数据；迁移备份不要包含 `session.private.json` 等登录态文件。恢复数据库时停止服务，将备份替换为 `data/practice.sqlite3`（先保留现有数据副本），再启动。
+页面“数据库备份”（仅管理员）使用 SQLite backup API，支持服务运行中下载；备份包含所有账号的学习记录和密码哈希，请妥善保管；数据库备份不含图片/PDF文件。完整迁移请停止服务后复制题库、原题与图片数据；迁移备份不要包含 `session.private.json` 等登录态文件。恢复数据库时停止服务，将备份替换为 `data/practice.sqlite3`（先保留现有数据副本），再启动。
 
 直接启动默认只监听127.0.0.1。Docker 默认映射8765端口，可在 `compose.yaml` 中直接修改。外部 Nginx 负责入口，应用无需配置可信代理或域名白名单，详见部署说明。
 
@@ -111,6 +123,6 @@ npm run check
 
 单元/集成测试使用临时数据库。界面验收使用 `FINREG_DB=data/qa.sqlite3` 和8766端口，避免测试记录混入实际学习数据。基础回归使用历史九套原题；扩展测试使用合成题验证申论、来源更新保护及过滤。全量库通过 scripts/audit_fenbi_api.py 另行只读审计。
 
-新版界面回归脚本为 `tests/ui_smoke.mjs`，使用独立的8767测试服务和含客观题、申论的隔离题库。运行时要求 `FINREG_UI_QA=1`；默认拒绝8765端口。需要 Playwright 和 Edge，可通过 `PLAYWRIGHT_MODULE` 指定现有 Playwright 包路径，通过 `FINREG_QA_URL` 指定其他隔离服务。脚本会创建练习、作答和笔记，不能指向个人学习档案。详细结果见 [界面改版验收](docs/ui-redesign-validation.md)。
+新版界面回归脚本为 `tests/ui_smoke.mjs`，使用独立的8767测试服务和含客观题、申论的隔离题库。测试服务需以 `FINREG_SETUP_CODE=UIQA-SETUP-CODE` 启动（或让脚本与服务使用相同的该变量），脚本用它创建 QA 管理员，并验证邀请注册、记录隔离和权限。运行时要求 `FINREG_UI_QA=1`；默认拒绝8765端口。需要 Playwright 和 Edge，可通过 `PLAYWRIGHT_MODULE` 指定现有 Playwright 包路径，通过 `FINREG_QA_URL` 指定其他隔离服务。脚本会创建练习、作答和笔记，不能指向个人学习档案。详细结果见 [界面改版验收](docs/ui-redesign-validation.md)。
 
-实现分为 `database.py`（表结构、迁移与入库）、`services.py`（查询、会话、判分与统计）、`importer.py`（导入与题目编辑）、`app.py`（HTTP 路由表与静态文件）；前端为 `web/` 下的原生 ES 模块：`home.js` 学习中心、`library.js` 题库与题目详情、`practice.js` 答题、`stats.js` 统计、`data.js` 数据管理，公共函数在 `ui.js`。外部工具只参考接口和导出格式，没有整体复制未注明许可证的仓库实现。
+实现分为 `database.py`（表结构、迁移与入库）、`auth.py`（账号、密码、登录会话、邀请码与命令行维护）、`services.py`（按账号的查询、会话、判分与统计）、`importer.py`（导入与题目编辑）、`app.py`（带权限级别的 HTTP 路由表与静态文件）；前端为 `web/` 下的原生 ES 模块：`auth.js` 登录注册与账号面板、`users.js` 用户管理、`home.js` 学习中心、`library.js` 题库与题目详情、`practice.js` 答题、`stats.js` 统计、`data.js` 数据管理，公共函数在 `ui.js`。外部工具只参考接口和导出格式，没有整体复制未注明许可证的仓库实现。

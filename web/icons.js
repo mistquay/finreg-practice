@@ -17,6 +17,10 @@ const paths = {
   pen: '<path d="m15 4 5 5M4 20l5-1L21 7l-5-5L4 14Z"/>',
   filter: '<path d="M4 7h16M7 12h10m-7 5h4"/>',
   focus: '<path d="M3 9V3h6m6 0h6v6m0 6v6h-6m-6 0H3v-6"/>',
+  users:
+    '<circle cx="9" cy="8" r="4"/><path d="M2 21c0-4 3-7 7-7s7 3 7 7M16 4a4 4 0 0 1 0 8m3 9c0-3-1.5-5.5-4-6.5"/>',
+  logout: '<path d="M15 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4M10 17l5-5-5-5m5 5H4"/>',
+  key: '<circle cx="8" cy="15" r="4"/><path d="m11 12 9-9m-3 3 3 3m-6 0 2 2"/>',
 };
 export function icon(name, className = "") {
   return `<svg class="icon ${className}" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.book}</svg>`;

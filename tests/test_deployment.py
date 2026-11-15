@@ -11,6 +11,7 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 import app
+import auth
 import database
 
 
@@ -24,6 +25,8 @@ class DeploymentTests(unittest.TestCase):
         for item in (self.root_patch, self.db_patch, self.app_patch):
             item.start()
         database.initialize()
+        self.uid = auth.create_user("owner", "owner-password", admin=True)
+        self.cookie = "finreg_session=" + auth.start_session(self.uid)
         self.server = app.ThreadingHTTPServer(("127.0.0.1", 0), app.Handler)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
@@ -37,8 +40,8 @@ class DeploymentTests(unittest.TestCase):
             item.stop()
         self.tmp.cleanup()
 
-    def request(self, path, data=None, host=None, origin=None):
-        headers = {}
+    def request(self, path, data=None, host=None, origin=None, cookie=True):
+        headers = {"Cookie": self.cookie} if cookie else {}
         if host:
             headers["Host"] = host
         if origin:
@@ -72,6 +75,10 @@ class DeploymentTests(unittest.TestCase):
             target.write_bytes(body)
             with self.request(f"/{folder}/{name}") as response:
                 self.assertEqual(response.read(), body)
+        with self.assertRaises(HTTPError) as error:
+            self.request("/assets/chart.svg", cookie=False)
+        self.assertEqual(error.exception.code, 401)
+        error.exception.close()
         with self.assertRaises(HTTPError) as error:
             self.request("/data/practice.sqlite3")
         self.assertEqual(error.exception.code, 404)

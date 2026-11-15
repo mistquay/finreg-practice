@@ -12,6 +12,7 @@ import {
   num,
   modal,
   toast,
+  isAdmin,
   paperSubject as getPaperSubject,
 } from "./ui.js";
 import { icon } from "./icons.js";
@@ -100,7 +101,9 @@ export async function renderHome(root, meta) {
                 `<button class="subject-row" data-module="${esc(m)}" role="checkbox"><span class="subject-symbol">${icon(SUBJECT_ICONS[m])}</span><span class="subject-copy"><strong>${esc(m)}</strong><small>${esc(DESCRIPTIONS[m] || "按模块练习，逐步积累")}</small></span><span class="subject-count">${num(modules[m])}<small>道题</small></span><span class="subject-select">${icon("check")}</span></button>`,
             )
             .join("") ||
-          '<div class="empty"><h3>先为学习空间添加题目</h3><a class="button primary" href="#data">导入题库</a></div>'
+          (isAdmin()
+            ? '<div class="empty"><h3>先为学习空间添加题目</h3><a class="button primary" href="#data">导入题库</a></div>'
+            : '<div class="empty"><h3>题库还没有题目</h3><p>请联系管理员导入题库。</p></div>')
         }</div>${
           available.length
             ? `<div class="category-picker" id="category-picker" role="group" aria-label="知识小类"></div><div class="builder-actions"><label class="inline-field">模式<select id="quick-mode"><option value="practice">练习模式</option><option value="exam">考试模式</option></select></label><label class="inline-field">每组题量<select id="quick-count"><option>10</option><option selected>20</option><option>30</option><option>50</option></select></label><label class="check-field"><input id="quick-unseen" type="checkbox">只练未做题</label><button class="primary" id="quick-start">开始练习 ${icon("arrow")}</button></div><p class="builder-hint" id="builder-hint"></p>`

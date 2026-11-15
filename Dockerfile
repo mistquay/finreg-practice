@@ -13,7 +13,7 @@ RUN groupadd --gid 1000 finreg \
     && mkdir -p /app/data \
     && chown finreg:finreg /app/data
 
-COPY app.py database.py services.py importer.py taxonomy.py ./
+COPY app.py auth.py database.py services.py importer.py taxonomy.py ./
 COPY web/ ./web/
 
 USER finreg
