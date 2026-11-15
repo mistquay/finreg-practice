@@ -4,13 +4,13 @@
 /* Layout: 方案文档单栏阅读宽度，两处"新界面预览"放进浏览器窗框里全宽展示 */
 :root{
   --bg:#eef2f5; --fg:#1d2a33; --muted:#5f6d78; --line:#d8e0e6; --panel:#ffffff;
-  --accent:#0f7a68; --accent-soft:#dff3ee; --warm:#e8862f; --code:#f3f6f8;
+  --accent:#1572a1; --accent-soft:#e0eff7; --warm:#e8862f; --code:#f3f6f8;
   --font:"PingFang SC","HarmonyOS Sans SC","MiSans","Microsoft YaHei UI","Microsoft YaHei","Noto Sans SC",system-ui,sans-serif;
   --num:"SF Pro Display","Segoe UI","Roboto",var(--font);
   /* 预览窗内是新界面本身：固定为亮色"晨雾玻璃"，两种主题下都不变 */
   --m-ground:#edf1f4; --m-ink:#17242c; --m-sub:#66737d; --m-faint:#9aa6ae;
   --m-glass:rgba(255,255,255,.62); --m-glass-line:rgba(255,255,255,.85); --m-solid:#ffffff;
-  --m-teal:#0f7a68; --m-teal-soft:#d9f1ea; --m-amber:#ee8a2c; --m-amber-soft:#fdebd8;
+  --m-teal:#1572a1; --m-teal-soft:#e0eff7; --m-amber:#ee8a2c; --m-amber-soft:#fdebd8;
   --m-blue:#4a78ee; --m-blue-soft:#e3ebfd; --m-red:#e0524a; --m-red-soft:#fbe3e1; --m-green:#1f9d63; --m-green-soft:#dcf3e7;
   --m-track:#e6ebef; --m-shadow:0 10px 30px rgba(28,52,70,.08);
 }
@@ -414,7 +414,7 @@ svg.spark{width:100%;height:46px;display:block}
   </div>
   <div class="swatches">
     <div class="sw"><i style="background:#edf1f4"></i><div><b>晨雾底</b>#EDF1F4</div></div>
-    <div class="sw"><i style="background:#0f7a68"></i><div><b>知序青 · 主色</b>#0F7A68，由现在的松绿提亮</div></div>
+    <div class="sw"><i style="background:#1572a1"></i><div><b>青蓝 · 主色</b>#1572A1（深色 #5BB8E6）</div></div>
     <div class="sw"><i style="background:#ee8a2c"></i><div><b>琥珀 · 当前/提醒</b>#EE8A2C，多选题、今日、进行中</div></div>
     <div class="sw"><i style="background:#4a78ee"></i><div><b>天蓝 · 信息</b>#4A78EE，趋势线、进行中</div></div>
     <div class="sw"><i style="background:#1f9d63"></i><div><b>答对</b>#1F9D63</div></div>
@@ -498,13 +498,13 @@ svg.spark{width:100%;height:46px;display:block}
 
 <section>
   <div class="sec-head">
-    <div class="eyebrow">08 · 待你确认</div>
-    <h2>开工前要定的几件事</h2>
+    <div class="eyebrow">08 · 已确认</div>
+    <h2>已确认的决定</h2>
   </div>
   <div class="grid2">
-    <div class="ask"><b>主色</b><span class="muted">由松绿提亮成知序青（方案默认），还是改成参考图那种青蓝？</span></div>
-    <div class="ask"><b>深色模式</b><span class="muted">参考图右上角有主题切换。要不要这轮一起做？会增加约 20% 工作量。</span></div>
-    <div class="ask"><b>考试日期与每日目标</b><span class="muted">需要新增设置表。做了首页才有倒计时和今日清单。</span></div>
+    <div class="ask"><b>主色</b><span class="muted">已定：青蓝。</span></div>
+    <div class="ask"><b>深色模式</b><span class="muted">已定：这轮一起做，跟随系统 / 浅色 / 深色三档。</span></div>
+    <div class="ask"><b>考试日期与每日目标</b><span class="muted">已定：做，新增 user_settings 表与 /api/settings。</span></div>
     <div class="ask"><b>侧栏改顶部导航</b><span class="muted">管理员入口收进"管理▾"下拉，普通用户看不到。</span></div>
   </div>
 </section>

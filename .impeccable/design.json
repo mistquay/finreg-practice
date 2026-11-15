@@ -1,0 +1,108 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-15T20:30:00+08:00",
+  "title": "Design System: 知序",
+  "extensions": {
+    "colorMeta": {
+      "primary": { "role": "primary", "displayName": "青蓝", "canonical": "#1572a1", "tonalRamp": ["#e0eff7", "#9fcde6", "#5bb8e6", "#1572a1", "#0f5f88", "#0d5a80"] },
+      "amber": { "role": "secondary", "displayName": "琥珀", "canonical": "#e2832a", "tonalRamp": ["#fcecd9", "#f6bd84", "#f0a256", "#e2832a", "#95500f"] },
+      "violet": { "role": "tertiary", "displayName": "淡紫", "canonical": "#5b6ee0" },
+      "ground": { "role": "neutral", "displayName": "晨雾底", "canonical": "#e9eff3" },
+      "paper": { "role": "neutral", "displayName": "纸面", "canonical": "#ffffff" },
+      "ink": { "role": "neutral", "displayName": "墨色正文", "canonical": "#13232e" },
+      "good": { "role": "semantic", "displayName": "答对", "canonical": "#1d9460" },
+      "bad": { "role": "semantic", "displayName": "答错", "canonical": "#d4463d" }
+    },
+    "typographyMeta": {
+      "page-title": { "displayName": "页面标题", "purpose": "每页一个，问候或页面名。" },
+      "metric": { "displayName": "指标数字", "purpose": "KPI 卡与总结弹窗的大数字，等宽数字。" },
+      "stem": { "displayName": "题干", "purpose": "答题页题干，长时间阅读。" }
+    },
+    "shadows": [
+      { "name": "shadow-1", "value": "0 1px 2px rgba(20,45,64,.05), 0 6px 20px rgba(20,45,64,.06)", "purpose": "卡片与纸面。" },
+      { "name": "shadow-2", "value": "0 2px 6px rgba(20,45,64,.06), 0 18px 44px rgba(20,45,64,.12)", "purpose": "弹窗、抽屉、筛选弹层。" },
+      { "name": "shadow-btn", "value": "0 3px 10px rgba(20,45,64,.16)", "purpose": "主按钮与标志。" },
+      { "name": "glass", "value": "background: rgba(255,255,255,.62); backdrop-filter: blur(22px) saturate(160%); border: 1px solid rgba(255,255,255,.8)", "purpose": "导航、仪表卡、侧板。" }
+    ],
+    "motion": [
+      { "name": "ease", "value": "cubic-bezier(0.22, 1, 0.36, 1)", "purpose": "状态切换、抽屉与弹窗进入。" },
+      { "name": "t", "value": "160ms", "purpose": "交互反馈时长。" }
+    ],
+    "breakpoints": [
+      { "name": "phone", "value": "760px" },
+      { "name": "tablet", "value": "900px" },
+      { "name": "dashboard-2col", "value": "1180px" },
+      { "name": "material-side-by-side", "value": "1200px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "主操作：开始练习、确认答案、下一题。",
+      "html": "<button class=\"ds-btn-primary\">开始练习</button>",
+      "css": ".ds-btn-primary{display:inline-flex;align-items:center;gap:8px;min-height:42px;padding:0 18px;border:0;border-radius:999px;background:var(--primary,#1572a1);color:#fff;font-size:13px;font-weight:600;box-shadow:0 3px 10px rgba(20,45,64,.16);cursor:pointer;transition:background .16s}.ds-btn-primary:hover{background:var(--primary-hover,#0f5f88)}.ds-btn-primary:focus-visible{outline:2px solid #1572a1;outline-offset:2px}"
+    },
+    {
+      "name": "Ink Button",
+      "kind": "button",
+      "refersTo": "button-ink",
+      "description": "卡片内的主操作，例如“从第 13 题继续”。",
+      "html": "<button class=\"ds-btn-ink\">从第 13 题继续 →</button>",
+      "css": ".ds-btn-ink{min-height:42px;padding:0 18px;border:0;border-radius:999px;background:#13232e;color:#fff;font-size:13px;font-weight:600;cursor:pointer}.ds-btn-ink:hover{background:#24394a}.ds-btn-ink:focus-visible{outline:2px solid #1572a1;outline-offset:2px}"
+    },
+    {
+      "name": "Chip",
+      "kind": "chip",
+      "refersTo": "chip",
+      "description": "快捷入口与小类选择；选中为墨色实心。",
+      "html": "<span class=\"ds-chip\">自选专项</span> <span class=\"ds-chip is-on\">计算机基础 <small>171</small></span>",
+      "css": ".ds-chip{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 14px;border:1px solid #e1e8ed;border-radius:999px;background:#fff;color:#13232e;font-size:13px;cursor:pointer}.ds-chip small{color:#66798a}.ds-chip:hover{border-color:#1572a1}.ds-chip.is-on{background:#13232e;border-color:#13232e;color:#fff}.ds-chip.is-on small{color:rgba(255,255,255,.7)}"
+    },
+    {
+      "name": "Search Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "题库与全局搜索，胶囊形。",
+      "html": "<label class=\"ds-search\"><svg viewBox=\"0 0 24 24\" width=\"18\" height=\"18\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\"><circle cx=\"10.5\" cy=\"10.5\" r=\"6.5\"/><path d=\"m16 16 5 5\"/></svg><input placeholder=\"搜索题干、知识点或解析\"></label>",
+      "css": ".ds-search{position:relative;display:flex;align-items:center}.ds-search svg{position:absolute;left:14px;color:#66798a}.ds-search input{width:100%;min-height:42px;padding:0 14px 0 42px;border:1px solid #cbd6de;border-radius:999px;background:#fff;color:#13232e;font-size:15px}.ds-search input:focus{outline:none;border-color:#1572a1;box-shadow:0 0 0 3px #e0eff7}"
+    },
+    {
+      "name": "Top Navigation",
+      "kind": "nav",
+      "refersTo": "nav-tab-active",
+      "description": "悬浮玻璃胶囊导航，当前页为墨色胶囊。",
+      "html": "<nav class=\"ds-nav\"><b>知序</b><a class=\"is-on\">学习中心</a><a>题库</a><a>错题收藏</a><a>统计</a></nav>",
+      "css": ".ds-nav{display:flex;align-items:center;gap:4px;height:56px;padding:0 10px;border-radius:999px;background:rgba(255,255,255,.62);border:1px solid rgba(255,255,255,.8);backdrop-filter:blur(22px) saturate(160%);box-shadow:0 1px 2px rgba(20,45,64,.05),0 6px 20px rgba(20,45,64,.06)}.ds-nav b{margin-right:10px}.ds-nav a{height:38px;display:inline-flex;align-items:center;padding:0 14px;border-radius:999px;color:#4b5d6b;font-size:15px;cursor:pointer}.ds-nav a:hover{background:rgba(255,255,255,.82);color:#13232e}.ds-nav a.is-on{background:#13232e;color:#fff}"
+    },
+    {
+      "name": "KPI Card",
+      "kind": "card",
+      "refersTo": "",
+      "description": "玻璃指标卡：标题、大数字、涨跌、对比说明、14 天微图。",
+      "html": "<article class=\"ds-kpi\"><header><span>今日作答</span><small>近 14 天</small></header><div><b>42</b><small>题</small><em>↑ 12</em></div><p>昨天 30 题 · 目标 60 题</p><svg viewBox=\"0 0 140 44\" preserveAspectRatio=\"none\"><rect x=\"4\" y=\"24\" width=\"6\" height=\"20\" rx=\"1.5\" fill=\"#1572a1\" fill-opacity=\".42\"/><rect x=\"14\" y=\"14\" width=\"6\" height=\"30\" rx=\"1.5\" fill=\"#1572a1\" fill-opacity=\".42\"/><rect x=\"24\" y=\"4\" width=\"6\" height=\"40\" rx=\"1.5\" fill=\"#1572a1\"/></svg></article>",
+      "css": ".ds-kpi{display:flex;flex-direction:column;gap:6px;width:260px;padding:18px;border-radius:20px;background:rgba(255,255,255,.62);border:1px solid rgba(255,255,255,.8);box-shadow:0 1px 2px rgba(20,45,64,.05),0 6px 20px rgba(20,45,64,.06)}.ds-kpi header{display:flex;justify-content:space-between;color:#4b5d6b;font-size:13px;font-weight:600}.ds-kpi header small{color:#66798a;font-weight:400}.ds-kpi div{display:flex;align-items:baseline;gap:6px}.ds-kpi b{font-size:30px;font-weight:400}.ds-kpi div small{color:#4b5d6b;font-size:12px}.ds-kpi em{font-style:normal;font-size:11px;font-weight:650;padding:2px 7px;border-radius:999px;background:#dbf2e6;color:#146b45}.ds-kpi p{margin:0;color:#66798a;font-size:12px}.ds-kpi svg{width:100%;height:44px}"
+    },
+    {
+      "name": "Answer Option",
+      "kind": "custom",
+      "refersTo": "question-sheet",
+      "description": "答题选项：单选圆形字母，判分后对错着色。",
+      "html": "<button class=\"ds-opt\"><span>A</span>保险合同是双务性合同</button><button class=\"ds-opt is-right\"><span>C</span>保险合同是附和性合同</button>",
+      "css": ".ds-opt{display:flex;align-items:center;gap:14px;width:100%;margin:6px 0;padding:12px 16px;border:1.5px solid #e1e8ed;border-radius:14px;background:#fff;color:#13232e;font-size:15px;text-align:left;cursor:pointer}.ds-opt span{display:grid;place-items:center;width:30px;height:30px;border:1.5px solid #cbd6de;border-radius:50%;background:#f4f7f9;font-weight:650}.ds-opt:hover{border-color:#1572a1}.ds-opt.is-right{border-color:#1d9460;background:#dbf2e6}.ds-opt.is-right span{background:#1d9460;border-color:#1d9460;color:#fff}"
+    }
+  ],
+  "narrative": {
+    "northStar": "晨雾玻璃",
+    "overview": "长时间备考的工作台。浅雾底上四团静止柔光色场，外壳与仪表是磨砂玻璃，读题与数据表格在实心纸面上。首屏回答：上次练到哪、今天完成多少、哪科最薄弱。",
+    "keyCharacteristics": ["悬浮胶囊导航", "带对比与 14 天微图的指标卡", "纸面题卡与玻璃侧栏", "青蓝主色 + 琥珀提醒", "浅色与深色两套变量"],
+    "rules": [
+      { "name": "玻璃只用于外壳", "body": "题干、选项、解析、数据表用纸面；导航、仪表卡、侧板、抽屉用玻璃。", "section": "elevation" },
+      { "name": "语义色不当强调色", "body": "绿红只表示判分结果、正确率区间与涨跌。", "section": "colors" },
+      { "name": "数字要有参照", "body": "每个指标都说明和什么比：昨日、前一周期或目标。", "section": "typography" }
+    ],
+    "dos": ["状态用胶囊与图标表达", "所有颜色走 tokens.css 变量", "两种主题、六个宽度都检查"],
+    "donts": ["不在阅读区放玻璃或柔光", "不用彩色发光阴影、渐变文字、emoji 图标", "不让背景色场动起来"]
+  }
+}

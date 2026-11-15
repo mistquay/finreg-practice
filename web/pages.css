@@ -379,7 +379,7 @@ body.is-auth #app {
 .week-strip .today b {
   background: var(--amber);
   color: #fff;
-  box-shadow: 0 4px 12px color-mix(in srgb, var(--amber) 40%, transparent);
+  box-shadow: var(--shadow-btn);
 }
 .week-strip .future b {
   color: var(--ink-3);

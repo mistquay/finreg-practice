@@ -34,7 +34,7 @@ button {
   background: var(--primary);
   border-color: var(--primary);
   color: var(--on-strong);
-  box-shadow: 0 6px 16px color-mix(in srgb, var(--primary) 26%, transparent);
+  box-shadow: var(--shadow-btn);
 }
 .primary:hover:not(:disabled) {
   background: var(--primary-hover);
