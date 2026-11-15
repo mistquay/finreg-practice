@@ -1,0 +1,219 @@
+/* 各页面布局。 */
+
+/* =============== 登录与注册 =============== */
+body.is-auth #app {
+  max-width: none;
+  padding: 0;
+}
+.auth-page {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 440px);
+  align-items: center;
+  gap: clamp(32px, 6vw, 96px);
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 48px max(24px, env(safe-area-inset-right, 0px)) 48px max(24px, env(safe-area-inset-left, 0px));
+}
+.auth-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: var(--fs-xl);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.auth-brand .brand-mark {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  font-size: 22px;
+}
+.auth-brand small {
+  display: block;
+  margin-top: 2px;
+  color: var(--ink-2);
+  font-size: var(--fs-xs);
+  font-weight: 400;
+  letter-spacing: 0.08em;
+}
+.auth-brand.compact {
+  display: none;
+  margin-bottom: 22px;
+}
+.auth-intro {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+.auth-slogan {
+  font-size: clamp(30px, 3.6vw, 46px);
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+}
+.auth-points {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--ink-2);
+}
+.auth-points li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.auth-points .icon {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  padding: 8px;
+  border-radius: 11px;
+  background: var(--glass-strong);
+  color: var(--primary-ink);
+}
+.auth-card {
+  padding: 34px 34px 28px;
+  border-radius: 28px;
+}
+.auth-card h1 {
+  font-size: var(--fs-2xl);
+}
+.auth-lead {
+  margin-top: 6px;
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+}
+#auth-form,
+.password-form,
+.settings-form {
+  display: grid;
+  gap: 14px;
+  margin-top: 22px;
+}
+#auth-form .primary {
+  width: 100%;
+  min-height: 46px;
+  margin-top: 6px;
+  font-size: var(--fs-md);
+}
+.auth-switch,
+.auth-help {
+  margin-top: 18px;
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+  text-align: center;
+}
+.auth-switch .text-link {
+  margin-left: 4px;
+}
+@media (max-width: 860px) {
+  .auth-page {
+    grid-template-columns: minmax(0, 1fr);
+    max-width: 480px;
+    align-content: center;
+    padding-top: 32px;
+  }
+  .auth-intro {
+    display: none;
+  }
+  .auth-brand.compact {
+    display: flex;
+  }
+}
+@media (max-width: 440px) {
+  .auth-card {
+    padding: 26px 20px 22px;
+    border-radius: 22px;
+  }
+}
+
+/* =============== 账号弹窗 =============== */
+.account-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.account-head h2 {
+  margin: 0;
+}
+.account-actions {
+  margin-top: 18px;
+}
+.account-section {
+  margin-top: 22px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+.account-section h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-md);
+}
+.account-section h3 .icon {
+  width: 18px;
+  height: 18px;
+  color: var(--primary-ink);
+}
+.password-form,
+.settings-form {
+  margin-top: 14px;
+}
+.settings-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.focus-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+@media (max-width: 520px) {
+  .settings-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* =============== 用户与数据管理 =============== */
+.admin-card .card-heading {
+  margin-bottom: 4px;
+}
+.invite-ready {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--primary-soft);
+  color: var(--ink);
+}
+.invite-code,
+.invite-copy input {
+  font-family: var(--font-mono);
+  letter-spacing: 0.08em;
+}
+.invite-copy {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.invite-copy input {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-lg);
+  background: var(--paper);
+}
+.user-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.user-cell .avatar {
+  width: 30px;
+  height: 30px;
+}

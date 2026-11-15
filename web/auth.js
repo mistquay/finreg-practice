@@ -49,8 +49,8 @@ export function renderAuth(root, setup, done) {
   function paint() {
     const m = MODES[mode];
     const fresh = mode !== "login";
-    root.innerHTML = `<div class="auth-page"><section class="card auth-card" aria-labelledby="auth-title">
-      <div class="auth-brand"><span class="brand-mark">知</span><span>知序<small>金融监管备考</small></span></div>
+    root.innerHTML = `<div class="auth-page"><div class="auth-intro" aria-hidden="true"><div class="auth-brand"><span class="brand-mark">知</span><span>知序<small>金融监管备考工作台</small></span></div><p class="auth-slogan">专项、真题、错题<br>每一道题都有迹可循</p><ul class="auth-points"><li>${icon("target")}按科目与考点组题，单选即判、多选确认</li><li>${icon("redo")}答错自动进错题本，随时重练</li><li>${icon("chart")}每日作答、正确率与覆盖率一目了然</li></ul></div><section class="auth-card glass" aria-labelledby="auth-title">
+      <div class="auth-brand compact"><span class="brand-mark">知</span><span>知序</span></div>
       <h1 id="auth-title">${m.title}</h1><p class="auth-lead">${m.lead}</p>
       <form id="auth-form" novalidate>
         <label>用户名<input name="username" autocomplete="username" maxlength="32" required></label>

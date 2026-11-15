@@ -1,0 +1,559 @@
+<title>知序界面改版方案</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Layout: 方案文档单栏阅读宽度，两处"新界面预览"放进浏览器窗框里全宽展示 */
+:root{
+  --bg:#eef2f5; --fg:#1d2a33; --muted:#5f6d78; --line:#d8e0e6; --panel:#ffffff;
+  --accent:#0f7a68; --accent-soft:#dff3ee; --warm:#e8862f; --code:#f3f6f8;
+  --font:"PingFang SC","HarmonyOS Sans SC","MiSans","Microsoft YaHei UI","Microsoft YaHei","Noto Sans SC",system-ui,sans-serif;
+  --num:"SF Pro Display","Segoe UI","Roboto",var(--font);
+  /* 预览窗内是新界面本身：固定为亮色"晨雾玻璃"，两种主题下都不变 */
+  --m-ground:#edf1f4; --m-ink:#17242c; --m-sub:#66737d; --m-faint:#9aa6ae;
+  --m-glass:rgba(255,255,255,.62); --m-glass-line:rgba(255,255,255,.85); --m-solid:#ffffff;
+  --m-teal:#0f7a68; --m-teal-soft:#d9f1ea; --m-amber:#ee8a2c; --m-amber-soft:#fdebd8;
+  --m-blue:#4a78ee; --m-blue-soft:#e3ebfd; --m-red:#e0524a; --m-red-soft:#fbe3e1; --m-green:#1f9d63; --m-green-soft:#dcf3e7;
+  --m-track:#e6ebef; --m-shadow:0 10px 30px rgba(28,52,70,.08);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#12181c; --fg:#e4ebef; --muted:#9aa8b2; --line:#2a353c; --panel:#192127;
+  --accent:#4cc3aa; --accent-soft:#163a33; --warm:#f0a35c; --code:#1f292f; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12181c; --fg:#e4ebef; --muted:#9aa8b2; --line:#2a353c; --panel:#192127;
+  --accent:#4cc3aa; --accent-soft:#163a33; --warm:#f0a35c; --code:#1f292f; color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:15px/1.75 var(--font);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:40px 72px}
+.wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:56px}
+.prose{max-width:760px}
+h1,h2,h3{text-wrap:balance;line-height:1.3;margin:0}
+h1{font-size:34px;letter-spacing:.01em}
+h2{font-size:24px}
+h3{font-size:17px}
+p{margin:0}
+.eyebrow{font-size:12px;letter-spacing:.12em;color:var(--accent);font-weight:600}
+.lede{color:var(--muted);font-size:16px;margin-top:12px}
+section{display:flex;flex-direction:column;gap:18px}
+.sec-head{display:flex;flex-direction:column;gap:6px;max-width:760px}
+.sec-head p{color:var(--muted)}
+ul.clean{margin:0;padding-left:1.2em;display:flex;flex-direction:column;gap:6px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px 22px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.box h3{display:flex;align-items:center;gap:8px}
+.tag{display:inline-flex;align-items:center;font-size:12px;padding:2px 9px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-weight:600;white-space:nowrap}
+.tag.warm{background:color-mix(in srgb,var(--warm) 16%,transparent);color:var(--warm)}
+.muted{color:var(--muted)}
+code{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:13px;background:var(--code);padding:1px 6px;border-radius:5px}
+.table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:14px;background:var(--panel)}
+table{border-collapse:collapse;width:100%;min-width:640px;font-size:14px}
+th,td{text-align:left;padding:11px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-weight:600;color:var(--muted);font-size:13px}
+tr:last-child td{border-bottom:0}
+.swatches{display:flex;flex-wrap:wrap;gap:10px}
+.sw{display:flex;align-items:center;gap:10px;padding:8px 14px 8px 8px;border:1px solid var(--line);border-radius:12px;background:var(--panel);font-size:13px}
+.sw i{width:30px;height:30px;border-radius:8px;display:block;border:1px solid rgba(0,0,0,.06)}
+.sw b{display:block;font-weight:600}
+.phase{display:grid;grid-template-columns:72px 1fr;gap:16px;padding:18px 0;border-top:1px solid var(--line)}
+.phase:first-child{border-top:0}
+.phase .p{font:600 22px/1 var(--num);color:var(--accent);padding-top:3px}
+.phase h3{margin-bottom:6px}
+.ask{border-left:3px solid var(--warm);padding:4px 0 4px 16px;display:flex;flex-direction:column;gap:4px}
+
+/* ---------- 预览窗：新界面 ---------- */
+.frame{border-radius:20px;overflow:hidden;border:1px solid var(--line);box-shadow:0 20px 50px rgba(20,40,55,.12);background:var(--m-ground)}
+.frame-bar{display:flex;align-items:center;gap:8px;padding:10px 16px;background:#f7f9fa;border-bottom:1px solid #e3e8ec;font-size:12px;color:#7d8a93}
+.frame-bar span{width:10px;height:10px;border-radius:50%;background:#e2e7ea}
+.frame-bar em{font-style:normal;margin-left:10px}
+.caption{font-size:13px;color:var(--muted);margin-top:10px}
+.m{position:relative;isolation:isolate;color:var(--m-ink);font:14px/1.55 var(--font);padding:18px 22px 26px;overflow:hidden}
+.m::before{content:"";position:absolute;inset:-20%;z-index:-1;
+  background:
+   radial-gradient(38% 46% at 12% 8%, rgba(110,212,190,.55), transparent 70%),
+   radial-gradient(30% 40% at 88% 18%, rgba(160,190,255,.55), transparent 70%),
+   radial-gradient(34% 40% at 62% 78%, rgba(255,205,140,.55), transparent 70%),
+   var(--m-ground);filter:blur(10px)}
+.glass{background:var(--m-glass);border:1px solid var(--m-glass-line);border-radius:20px;box-shadow:var(--m-shadow);
+  -webkit-backdrop-filter:blur(22px) saturate(160%);backdrop-filter:blur(22px) saturate(160%);min-width:0}
+.solid{background:var(--m-solid);border-radius:20px;box-shadow:var(--m-shadow);min-width:0}
+.nav{display:flex;align-items:center;gap:12px;padding:8px 10px 8px 16px;border-radius:999px;flex-wrap:wrap}
+.logo{display:flex;align-items:center;gap:8px;font-weight:700;font-size:15px;margin-right:6px}
+.logo i{width:26px;height:26px;border-radius:8px;background:var(--m-teal);color:#fff;display:grid;place-items:center;font-style:normal;font-size:14px}
+.tabs{display:flex;gap:4px;flex-wrap:wrap}
+.tabs a{padding:6px 14px;border-radius:999px;color:var(--m-sub);text-decoration:none;font-size:13px}
+.tabs a.on{background:var(--m-ink);color:#fff}
+.nav .right{margin-left:auto;display:flex;align-items:center;gap:8px}
+.search{display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.75);border-radius:999px;padding:6px 14px;color:var(--m-faint);font-size:12px;min-width:170px}
+.ibtn{width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,.75);display:grid;place-items:center;color:var(--m-sub)}
+.avatar{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#ffb36b,#ee8a2c);color:#fff;display:grid;place-items:center;font-size:13px;font-weight:600}
+.hello{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin:22px 4px 18px}
+.hello h4{font-size:26px;margin:0;font-weight:700;letter-spacing:.01em}
+.hello p{color:var(--m-sub);font-size:13px;margin-top:4px}
+.hello p b{color:var(--m-amber);font-weight:600}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:999px;background:rgba(255,255,255,.7);border:1px solid var(--m-glass-line);font-size:13px;color:var(--m-ink);white-space:nowrap}
+.chip.pri{background:var(--m-teal);color:#fff;border-color:transparent}
+.bento{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:14px}
+.c{padding:16px 18px;display:flex;flex-direction:column;gap:10px}
+.c-h{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--m-sub);font-weight:600}
+.c-h span:last-child{font-weight:400;color:var(--m-faint);font-size:12px}
+.s6{grid-column:span 6}.s3{grid-column:span 3}.s4{grid-column:span 4}.s5{grid-column:span 5}.s7{grid-column:span 7}.s8{grid-column:span 8}
+.resume h5{font-size:20px;margin:0}
+.resume .meta{color:var(--m-sub);font-size:12px}
+.bar{height:8px;border-radius:99px;background:var(--m-track);overflow:hidden}
+.bar i{display:block;height:100%;border-radius:99px;background:var(--m-teal)}
+.row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:999px;font-size:13px;font-weight:600;border:0}
+.btn.pri{background:var(--m-ink);color:#fff}
+.btn.ghost{background:rgba(255,255,255,.8);color:var(--m-ink)}
+.mini-stats{display:flex;gap:22px}
+.mini-stats div{display:flex;flex-direction:column}
+.mini-stats b{font:500 20px/1.2 var(--num);font-variant-numeric:tabular-nums}
+.mini-stats span{font-size:12px;color:var(--m-sub)}
+.week{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;text-align:center;font-size:11px;color:var(--m-sub)}
+.week b{display:grid;place-items:center;width:30px;height:30px;margin:4px auto 0;border-radius:50%;font:500 12px var(--num);color:var(--m-ink)}
+.week b.done{background:var(--m-teal-soft);color:var(--m-teal)}
+.week b.today{background:var(--m-amber);color:#fff}
+.streak{font-size:12px;color:var(--m-sub)}
+.streak b{font:600 22px var(--num);color:var(--m-ink);margin-right:4px}
+.kpi .big{display:flex;align-items:baseline;gap:8px}
+.kpi .big b{font:400 30px/1.1 var(--num);letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+.kpi .big small{font-size:12px;color:var(--m-sub)}
+.delta{font-size:11px;padding:1px 7px;border-radius:99px;font-weight:600;white-space:nowrap}
+.up{background:var(--m-green-soft);color:var(--m-green)}
+.down{background:var(--m-red-soft);color:var(--m-red)}
+.kpi .cmp{font-size:11px;color:var(--m-faint)}
+svg.spark{width:100%;height:46px;display:block}
+.gauge{display:flex;flex-direction:column;align-items:center;gap:4px}
+.gauge svg{width:100%;max-width:220px;height:auto}
+.subj{display:flex;flex-direction:column;gap:6px;font-size:12px}
+.subj div{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.pill{font-size:11px;padding:1px 8px;border-radius:99px;font-weight:600;white-space:nowrap}
+.p-ok{background:var(--m-green-soft);color:var(--m-green)}
+.p-warn{background:var(--m-amber-soft);color:#b8621a}
+.p-new{background:var(--m-track);color:var(--m-sub)}
+.p-run{background:var(--m-blue-soft);color:var(--m-blue)}
+.check{display:flex;flex-direction:column;gap:8px;font-size:13px}
+.check li{list-style:none;display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:12px;background:rgba(255,255,255,.55)}
+.check ul{margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.check .ok{width:18px;height:18px;border-radius:50%;background:var(--m-teal);color:#fff;display:grid;place-items:center;font-size:11px;flex:none}
+.check .no{width:18px;height:18px;border-radius:50%;border:1.5px solid var(--m-faint);flex:none}
+.check .done-t{color:var(--m-faint);text-decoration:line-through}
+.check .n{margin-left:auto;font:12px var(--num);color:var(--m-sub)}
+.ptable{width:100%;border-collapse:collapse;font-size:12.5px;min-width:0}
+.ptable th{font-weight:500;color:var(--m-faint);font-size:11.5px;padding:6px 6px;border-bottom:1px solid rgba(0,0,0,.05);text-align:left}
+.ptable td{padding:9px 6px;border-bottom:1px solid rgba(0,0,0,.04)}
+.ptable tr:last-child td{border-bottom:0}
+.ptable .y{font:500 14px var(--num);color:var(--m-sub)}
+.ptable .bar{height:6px;width:90px}
+.recent{display:flex;flex-direction:column;gap:8px}
+.recent div{display:flex;flex-direction:column;gap:2px;padding:10px 12px;border-radius:14px;background:rgba(255,255,255,.6)}
+.recent div.hot{background:var(--m-amber);color:#fff}
+.recent div.hot small{color:rgba(255,255,255,.85)}
+.recent b{font-size:13px;display:flex;justify-content:space-between;gap:8px}
+.recent small{font-size:11.5px;color:var(--m-sub)}
+.mtag{font-size:10.5px;padding:1px 7px;border-radius:99px;background:rgba(255,255,255,.25)}
+.syn{position:absolute;right:18px;bottom:8px;font-size:11px;color:var(--m-faint)}
+
+/* 练习页预览 */
+.pbar{display:flex;align-items:center;gap:14px;padding:8px 10px 8px 14px;border-radius:999px;flex-wrap:wrap}
+.pbar .t{font-weight:600;font-size:14px}
+.pbar .prog{flex:1;min-width:120px;display:flex;align-items:center;gap:10px;font:12px var(--num);color:var(--m-sub)}
+.pbar .prog .bar{flex:1;height:6px}
+.timer{font:500 14px var(--num);font-variant-numeric:tabular-nums;padding:5px 12px;border-radius:99px;background:rgba(255,255,255,.75)}
+.pgrid{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;margin-top:16px}
+.q{padding:26px 30px;display:flex;flex-direction:column;gap:16px}
+.q-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--m-sub)}
+.type{background:var(--m-amber);color:#fff;padding:2px 10px;border-radius:99px;font-weight:600}
+.topic{background:var(--m-teal-soft);color:var(--m-teal);padding:2px 10px;border-radius:99px}
+.q-text{font-size:18px;line-height:1.85}
+.opt{display:flex;align-items:center;gap:14px;padding:12px 16px;border-radius:14px;border:1.5px solid var(--m-track);font-size:15px}
+.opt i{width:28px;height:28px;border-radius:7px;border:1.5px solid var(--m-faint);display:grid;place-items:center;font:600 13px var(--num);font-style:normal;color:var(--m-sub);flex:none}
+.opt.right{border-color:var(--m-green);background:var(--m-green-soft)}
+.opt.right i{background:var(--m-green);border-color:var(--m-green);color:#fff}
+.opt.wrong{border-color:var(--m-red);background:var(--m-red-soft)}
+.opt.wrong i{background:var(--m-red);border-color:var(--m-red);color:#fff}
+.opt em{margin-left:auto;font-style:normal;font-size:12px;font-weight:600}
+.opt.right em{color:var(--m-green)}.opt.wrong em{color:var(--m-red)}
+.explain{border-radius:16px;background:#f6f8f9;padding:14px 18px;font-size:14px;line-height:1.8;display:flex;flex-direction:column;gap:6px}
+.explain b{font-size:13px}
+.q-foot{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.q-foot small{font-size:12px;color:var(--m-faint)}
+.side{display:flex;flex-direction:column;gap:14px}
+.sheet{display:grid;grid-template-columns:repeat(5,1fr);gap:7px}
+.sheet b{height:34px;border-radius:10px;display:grid;place-items:center;font:500 12px var(--num);background:rgba(255,255,255,.7)}
+.sheet .r{background:var(--m-green-soft);color:var(--m-green)}
+.sheet .w{background:var(--m-red-soft);color:var(--m-red)}
+.sheet .cur{outline:2px solid var(--m-ink);outline-offset:-2px;background:#fff}
+.legend{display:flex;gap:12px;font-size:11px;color:var(--m-sub);flex-wrap:wrap}
+.legend i{display:inline-block;width:8px;height:8px;border-radius:3px;margin-right:4px}
+.seg{display:flex;background:rgba(255,255,255,.6);border-radius:999px;padding:3px;font-size:12px}
+.seg span{flex:1;text-align:center;padding:5px 0;border-radius:99px;color:var(--m-sub)}
+.seg span.on{background:#fff;color:var(--m-ink);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.note{border-radius:12px;background:rgba(255,255,255,.7);padding:10px 12px;font-size:12.5px;color:var(--m-sub);min-height:70px}
+
+@media (max-width:980px){
+  .s3{grid-column:span 6}.s4,.s5,.s7,.s8{grid-column:span 12}.s6{grid-column:span 12}
+  .pgrid{grid-template-columns:1fr}
+}
+@media (max-width:560px){
+  .s3{grid-column:span 12}
+  .search{display:none}
+  .q{padding:20px 18px}
+  h1{font-size:28px}
+  .phase{grid-template-columns:1fr;gap:4px}
+}
+@media (prefers-reduced-motion:no-preference){.chip,.btn{transition:transform .16s}.chip:hover,.btn:hover{transform:translateY(-1px)}}
+</style>
+
+<div class="wrap">
+
+<header class="prose">
+  <div class="eyebrow">知序 · 金融监管备考工作台</div>
+  <h1 style="margin-top:10px">界面改版方案：晨雾玻璃</h1>
+  <p class="lede">参考你给的四组后台设计（柔光色场、磨砂玻璃卡片、悬浮胶囊导航、卡内微型图表），把知序从"一长条表单页"改成"打开就知道今天做什么"的备考仪表盘。题库、判分、会话保存、权限这些已有功能全部保留，只换外观和页面组织，另需要几处后端接口配合。</p>
+</header>
+
+<section>
+  <div class="sec-head">
+    <div class="eyebrow">01 · 现状</div>
+    <h2>现在的界面问题出在哪</h2>
+    <p>以下来自隔离数据库副本上的实际截图（1440 宽），不是泛泛的"不好看"。</p>
+  </div>
+  <div class="grid2">
+    <div class="box"><h3>首屏被配置器占满</h3><p class="muted">学习中心的主体是专项练习配置：5 个科目行、7 个小类胶囊、模式和题量下拉。真正有用的"今天练了多少、该补哪里"被挤到右侧一条细栏，而且全是纯文字。</p></div>
+    <div class="box"><h3>数据没有形状</h3><p class="muted">今日学习、正确率、覆盖率都只是一个数字加一行说明。统计页顶部 7 个下拉框一字排开，趋势图之前要先过一屏筛选。</p></div>
+    <div class="box"><h3>层次扁平、色调发闷</h3><p class="muted">米白底、松绿、细边框，所有区块同一种处理，卡片、列表、分隔线混用，看不出主次。224px 的侧栏只放 6 个入口，答题时也常驻，挤占题目宽度。</p></div>
+    <div class="box"><h3>答题页信息太杂</h3><p class="muted">题型提示、"进度自动保存"、快捷键说明、来源 PDF 全塞在题卡里；收藏是个孤零零的文字按钮，笔记框占了右栏一半高度。</p></div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head">
+    <div class="eyebrow">02 · 新界面预览</div>
+    <h2>学习中心：从"配置表单"变成"今日仪表盘"</h2>
+    <p>首屏回答三件事：上次练到哪、今天完成了多少、哪个科目最薄弱。专项配置收进"自选专项"抽屉，从任何页面都能唤起。</p>
+  </div>
+
+  <div>
+  <div class="frame" role="img" aria-label="学习中心改版预览">
+    <div class="frame-bar"><span></span><span></span><span></span><em>知序 · 学习中心</em></div>
+    <div class="m">
+      <nav class="nav glass">
+        <div class="logo"><i>知</i>知序</div>
+        <div class="tabs"><a class="on">学习中心</a><a>题库</a><a>错题收藏</a><a>统计</a><a>管理 ▾</a></div>
+        <div class="right">
+          <div class="search">⌕ 搜索题目、考点、试卷</div>
+          <div class="ibtn">☀</div>
+          <div class="avatar">林</div>
+        </div>
+      </nav>
+
+      <div class="hello">
+        <div>
+          <h4>晚上好，小林</h4>
+          <p>距 2027 金融监管笔试还有 <b>58 天</b> · 今日目标 60 题，已完成 42 题</p>
+        </div>
+        <div class="chips">
+          <span class="chip pri">▶ 继续练习</span>
+          <span class="chip">＋ 自选专项</span>
+          <span class="chip">↺ 错题重练 23</span>
+          <span class="chip">◷ 整卷模考</span>
+        </div>
+      </div>
+
+      <div class="bento">
+        <div class="glass c s6 resume">
+          <div class="c-h"><span>上次的练习</span><span>11月15日 21:46</span></div>
+          <h5>计算机专业 · 专项练习</h5>
+          <div class="meta">练习模式 · 信息安全与科技风险、网络技术及应用 · 20 题</div>
+          <div class="row" style="gap:12px"><div class="bar" style="flex:1"><i style="width:60%"></i></div><span style="font:500 13px var(--num)">12 / 20</span></div>
+          <div class="row" style="justify-content:space-between">
+            <div class="mini-stats"><div><b>10</b><span>答对</span></div><div><b>2</b><span>答错</span></div><div><b>18′24″</b><span>已用时</span></div></div>
+            <div class="row"><span class="btn ghost">放弃</span><span class="btn pri">从第 13 题继续 →</span></div>
+          </div>
+        </div>
+
+        <div class="glass c s3">
+          <div class="c-h"><span>本周打卡</span><span>11月</span></div>
+          <div class="week">
+            <div>一<b class="done">10</b></div><div>二<b class="done">11</b></div><div>三<b>12</b></div><div>四<b class="done">13</b></div><div>五<b class="done">14</b></div><div>六<b class="today">15</b></div><div>日<b>16</b></div>
+          </div>
+          <div class="streak"><b>3</b>天连续 · 本周已练 4 天</div>
+        </div>
+
+        <div class="glass c s3">
+          <div class="c-h"><span>科目掌握</span><span>正确率</span></div>
+          <div class="gauge"><svg id="gauge" viewBox="0 0 200 112" aria-hidden="true"></svg></div>
+          <div class="subj">
+            <div><span>计算机专业</span><span class="pill p-ok">82%</span></div>
+            <div><span>经济金融基础</span><span class="pill p-warn">61% 薄弱</span></div>
+            <div><span>英语</span><span class="pill p-new">未开始</span></div>
+          </div>
+        </div>
+
+        <div class="glass c s3 kpi">
+          <div class="c-h"><span>今日作答</span><span>近 14 天</span></div>
+          <div class="big"><b>42</b><small>题</small><span class="delta up">↑ 12</span></div>
+          <div class="cmp">较昨日 30 题</div>
+          <svg class="spark" data-bars="18,24,0,31,40,22,35,28,0,26,44,38,30,42" data-color="--m-teal" viewBox="0 0 140 46" preserveAspectRatio="none"></svg>
+        </div>
+        <div class="glass c s3 kpi">
+          <div class="c-h"><span>正确率</span><span>近 14 天</span></div>
+          <div class="big"><b>78.6</b><small>%</small><span class="delta up">↑ 3.1</span></div>
+          <div class="cmp">较昨日 75.5%</div>
+          <svg class="spark" data-line="68,71,0,70,74,72,73,76,0,74,72,77,75.5,78.6" data-color="--m-blue" viewBox="0 0 140 46" preserveAspectRatio="none"></svg>
+        </div>
+        <div class="glass c s3 kpi">
+          <div class="c-h"><span>有效用时</span><span>近 14 天</span></div>
+          <div class="big"><b>1:26</b><small>时:分</small><span class="delta down">↓ 0:14</span></div>
+          <div class="cmp">较昨日 1:40</div>
+          <svg class="spark" data-bars="40,52,0,61,80,47,70,66,0,58,95,88,100,86" data-color="--m-amber" viewBox="0 0 140 46" preserveAspectRatio="none"></svg>
+        </div>
+        <div class="glass c s3 kpi">
+          <div class="c-h"><span>待复习错题</span><span>按最近一次作答</span></div>
+          <div class="big"><b>23</b><small>道</small><span class="delta down">+ 2</span></div>
+          <div class="cmp">今天新增 2 道，已复习 8 道</div>
+          <div class="row" style="gap:6px;margin-top:auto"><span class="pill p-warn">经济金融 11</span><span class="pill p-run">计算机 9</span><span class="pill p-new">行测 3</span></div>
+        </div>
+
+        <div class="glass c s4 check">
+          <div class="c-h"><span>今日清单</span><span>2 / 4 完成</span></div>
+          <div class="bar"><i style="width:50%;background:var(--m-amber)"></i></div>
+          <ul>
+            <li><span class="no"></span>完成 60 题<span class="n">42 / 60</span></li>
+            <li><span class="ok">✓</span><span class="done-t">复习昨天的 8 道错题</span></li>
+            <li><span class="no"></span>做完一套真题的一个模块<span class="n">0 / 1</span></li>
+            <li><span class="ok">✓</span><span class="done-t">写一条笔记</span></li>
+          </ul>
+        </div>
+
+        <div class="glass c s5">
+          <div class="c-h"><span>真题进度 · 计算机类专业</span><span>全部题库 →</span></div>
+          <div style="overflow-x:auto">
+          <table class="ptable">
+            <thead><tr><th>年份</th><th>试卷</th><th>完成</th><th>正确率</th></tr></thead>
+            <tbody>
+              <tr><td class="y">2024</td><td>金融监管计算机类专业真题</td><td><div class="bar"><i style="width:38%"></i></div></td><td><span class="pill p-ok">81%</span></td></tr>
+              <tr><td class="y">2023</td><td>金融监管计算机类专业真题</td><td><div class="bar"><i style="width:100%"></i></div></td><td><span class="pill p-warn">64%</span></td></tr>
+              <tr><td class="y">2022</td><td>金融监管计算机类专业真题</td><td><div class="bar"><i style="width:0%"></i></div></td><td><span class="pill p-new">未开始</span></td></tr>
+              <tr><td class="y">2021</td><td>金融监管计算机类专业真题</td><td><div class="bar"><i style="width:0%"></i></div></td><td><span class="pill p-new">未开始</span></td></tr>
+            </tbody>
+          </table>
+          </div>
+        </div>
+
+        <div class="glass c s3">
+          <div class="c-h"><span>最近练习</span><span>3 条</span></div>
+          <div class="recent">
+            <div class="hot"><b>计算机专业 · 专项 <span class="mtag">进行中</span></b><small>12 / 20 · 21:46</small></div>
+            <div><b>经济金融基础 · 20 题 <span class="pill p-new">未开始</span></b><small>11-09 20:58</small></div>
+            <div><b>2023 真题 · 考试 <span class="pill p-ok">已交卷</span></b><small>120 题 · 正确 64%</small></div>
+          </div>
+        </div>
+      </div>
+      <div class="syn">示例数据</div>
+    </div>
+  </div>
+  <p class="caption">桌面 1440 宽的布局示意，数字是示例。窄屏下卡片按 12 栏网格依次堆叠，手机端导航改为底部 4 栏标签。</p>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head">
+    <h2>答题页：外壳用玻璃，读题区用纸面</h2>
+    <p>长时间读题需要稳定的对比度，所以题干、选项和解析放在实心白卡上；只有顶部进度条和右侧答题卡用磨砂玻璃。答题时全局导航收起，换成一条细进度胶囊。</p>
+  </div>
+  <div>
+  <div class="frame" role="img" aria-label="答题页改版预览">
+    <div class="frame-bar"><span></span><span></span><span></span><em>知序 · 专注练习</em></div>
+    <div class="m">
+      <div class="pbar glass">
+        <span class="ibtn" style="width:28px;height:28px">←</span>
+        <span class="t">计算机专业 · 专项练习</span>
+        <div class="prog"><div class="bar"><i style="width:60%"></i></div>12 / 20</div>
+        <span class="timer">18:24</span>
+        <span class="btn ghost">暂停</span>
+        <span class="btn ghost">⛶ 专注</span>
+      </div>
+      <div class="pgrid">
+        <div class="solid q">
+          <div class="q-meta"><span class="type">多选题</span><span class="topic">信息安全与科技风险</span><span>第 12 题 · 2022 年真题第 99 题</span><span style="margin-left:auto">☆ 收藏</span></div>
+          <div class="q-text">在银行卡风险管理领域，以下哪些措施可以防范伪卡欺诈？</div>
+          <div class="opt right"><i>A</i>添加卡片校验码<em>正确</em></div>
+          <div class="opt right"><i>B</i>增加其他交易验证要素<em>正确</em></div>
+          <div class="opt wrong"><i>C</i>限制交易时间<em>你的选择</em></div>
+          <div class="opt right"><i>D</i>加强交易监控<em>漏选</em></div>
+          <div class="explain"><b>解析 · 正确答案 ABD</b>伪卡欺诈的核心是复制磁条信息。校验码、额外验证要素和实时交易监控都能识别或拦截伪卡交易；限制交易时间与是否伪卡无关。</div>
+          <div class="q-foot"><small>原卷 · 第 10 页 ↗ · 已保存</small><div class="row"><span class="btn ghost">上一题</span><span class="btn pri">下一题 →</span></div></div>
+        </div>
+        <div class="side">
+          <div class="glass c">
+            <div class="c-h"><span>答题卡</span><span>10 对 · 2 错</span></div>
+            <div class="sheet" id="sheet"></div>
+            <div class="legend"><span><i style="background:var(--m-green)"></i>答对</span><span><i style="background:var(--m-red)"></i>答错</span><span><i style="background:#fff;outline:1.5px solid var(--m-ink)"></i>当前</span></div>
+            <span class="btn ghost" style="justify-content:center">结束并总结</span>
+          </div>
+          <div class="glass c">
+            <div class="seg"><span class="on">笔记</span><span>同考点</span></div>
+            <div class="note">伪卡 = 复制磁条。防范看"能否识别卡是假的"，与交易时间无关。</div>
+          </div>
+        </div>
+      </div>
+      <div class="syn">示例数据</div>
+    </div>
+  </div>
+  <p class="caption">练习/考试两种反馈方式、单选即判、多选确认、手机底部固定操作栏都保持现有逻辑不变。</p>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head">
+    <div class="eyebrow">03 · 视觉系统</div>
+    <h2>晨雾玻璃的规则</h2>
+    <p>从参考图拿的是做法，不是照搬：浅雾底上铺三团静止的柔光色场，卡片是半透明磨砂玻璃，数字用细字重大字号，状态全部用胶囊表达。</p>
+  </div>
+  <div class="swatches">
+    <div class="sw"><i style="background:#edf1f4"></i><div><b>晨雾底</b>#EDF1F4</div></div>
+    <div class="sw"><i style="background:#0f7a68"></i><div><b>知序青 · 主色</b>#0F7A68，由现在的松绿提亮</div></div>
+    <div class="sw"><i style="background:#ee8a2c"></i><div><b>琥珀 · 当前/提醒</b>#EE8A2C，多选题、今日、进行中</div></div>
+    <div class="sw"><i style="background:#4a78ee"></i><div><b>天蓝 · 信息</b>#4A78EE，趋势线、进行中</div></div>
+    <div class="sw"><i style="background:#1f9d63"></i><div><b>答对</b>#1F9D63</div></div>
+    <div class="sw"><i style="background:#e0524a"></i><div><b>答错</b>#E0524A</div></div>
+  </div>
+  <div class="grid2">
+    <div class="box"><h3>材质分两种</h3><ul class="clean"><li>玻璃：白 62% 透明 + 22px 模糊 + 1px 白描边，用于导航、仪表卡、侧板、抽屉。</li><li>纸面：实心白，用于题干、选项、解析、数据表格，保证正文对比度。</li><li>不支持 <code>backdrop-filter</code> 或系统开启"减少透明度"时退回 92% 不透明白。</li></ul></div>
+    <div class="box"><h3>字与数</h3><ul class="clean"><li>仍用系统中文字体，不引入外部字体（服务部署在公网也不依赖 CDN）。</li><li>大数字 28–32px、常规字重、等宽数字；单位和对比说明 12px 灰字。</li><li>题干 18px / 1.85 行高不变。</li></ul></div>
+    <div class="box"><h3>形状与间距</h3><ul class="clean"><li>卡片圆角 20px，按钮、标签、导航全部用胶囊形。</li><li>12 栏网格，卡片间距 14px；内容最宽 1440px。</li><li>阴影只有一层，很淡，靠模糊和描边区分层次。</li></ul></div>
+    <div class="box"><h3>图表</h3><ul class="clean"><li>自己写一个小的 <code>charts.js</code>，用内联 SVG 画柱状、折线、半环、日历热力，不引图表库。</li><li>每个 KPI 卡固定结构：标题 / 大数字 / 涨跌胶囊 / 对比说明 / 14 天微图。</li><li>色场不做动画；交互反馈 160ms，尊重减少动效设置。</li></ul></div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head">
+    <div class="eyebrow">04 · 页面与分区</div>
+    <h2>每个页面怎么改</h2>
+  </div>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th style="width:120px">页面</th><th>新的分区</th><th style="width:30%">和现在比</th></tr></thead>
+    <tbody>
+      <tr><td><b>导航外壳</b></td><td>顶部悬浮胶囊：标志 · 学习中心 / 题库 / 错题收藏 / 统计 / 管理▾（仅管理员）· 搜索 · 主题 · 头像菜单。手机端底部 4 栏标签。</td><td>去掉 224px 侧栏和面包屑，内容区多出约 260px。</td></tr>
+      <tr><td><b>学习中心</b></td><td>问候 + 考试倒计时 + 快捷胶囊；继续练习、本周打卡、科目掌握；4 张 KPI 卡；今日清单、真题进度、最近练习。</td><td>专项配置器移入"自选专项"抽屉；数字都配上微图和昨日对比。</td></tr>
+      <tr><td><b>自选专项抽屉</b></td><td>右侧滑出：科目多选卡片（带题量与掌握度）→ 小类胶囊 → 模式分段控件 → 题量 → 开始。</td><td>逻辑与现在完全一致，学习中心、题库、错题页都能打开。</td></tr>
+      <tr><td><b>答题页</b></td><td>细进度胶囊替代全局导航；左侧纸面题卡，右侧玻璃答题卡 + 笔记/同考点分段。收藏挪到题目右上角。快捷键说明收进 <code>?</code> 浮层。</td><td>判分、保存、考试交卷流程不改。</td></tr>
+      <tr><td><b>题库</b></td><td>顶部"按题目 / 按试卷"分段；搜索胶囊 + 3 个常用筛选，其余进"更多筛选"弹层；结果是纸面表格，行内显示掌握状态胶囊。真题列表并入"按试卷"。</td><td>筛选仍写入网址，可返回恢复。</td></tr>
+      <tr><td><b>错题收藏</b></td><td>上方按科目分组的错题数卡片（点击即筛选），下方列表；一键"把这些错题组成练习"。</td><td>新增按科目的错题分布。</td></tr>
+      <tr><td><b>统计</b></td><td>日/周/月分段 + 一个"筛选"按钮；KPI 卡带上一周期对比；作答趋势（柱+正确率线）；26 周学习日历热力；模块正确率横条；对错分布半环。</td><td>7 个下拉收进筛选弹层；新增对比和热力日历。</td></tr>
+      <tr><td><b>登录注册</b></td><td>整屏柔光色场上一张居中的玻璃卡，左侧一句产品说明。</td><td>最能体现新风格的一页，改动小。</td></tr>
+      <tr><td><b>数据 / 用户管理</b></td><td>玻璃外壳 + 纸面表格；用户行带头像首字、角色胶囊、状态胶囊；邀请码做成可复制的卡片。</td><td>功能不变。</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head">
+    <div class="eyebrow">05 · 后端配合</div>
+    <h2>需要新增或调整的接口</h2>
+    <p>判分、会话、导入导出、权限都不动。新增的都是只读汇总和一张设置表。</p>
+  </div>
+  <div class="grid2">
+    <div class="box"><h3><span class="tag">新增</span><code>GET /api/dashboard</code></h3><p class="muted">学习中心一次请求拿全：今日与昨日的题量、正确率、用时；近 14 天每日序列；连续打卡天数与本周打卡日；各科正确率与覆盖；待复习错题按科目计数；今日清单完成度。全部按北京时间自然日，复用现有 <code>statistics</code> 的计数口径（未交卷考试不计）。</p></div>
+    <div class="box"><h3><span class="tag">新增</span>用户设置</h3><p class="muted">新表 <code>user_settings</code>（考试日期、每日目标题量、主攻科目），接口 <code>GET/POST /api/me/settings</code>。倒计时、今日目标、"主攻科目"默认勾选都从这里来。头像菜单里可改。</p></div>
+    <div class="box"><h3><span class="tag warm">调整</span><code>GET /api/stats</code></h3><p class="muted">增加 <code>compare=1</code>：返回上一个等长周期的汇总，用于涨跌胶囊；增加 <code>heatmap=1</code>：返回近 26 周每日题量，用于学习日历。</p></div>
+    <div class="box"><h3><span class="tag warm">调整</span><code>GET /api/meta</code></h3><p class="muted">试卷已有 <code>done</code>，再加每套试卷的正确率，供"真题进度"表使用。错题数增加按科目分组。</p></div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head">
+    <div class="eyebrow">06 · 前端重构</div>
+    <h2>代码层面的做法</h2>
+  </div>
+  <div class="box">
+    <ul class="clean">
+      <li>继续用原生 ES 模块，不加构建步骤。</li>
+      <li>2,676 行的 <code>style.css</code> 拆成 <code>tokens.css</code>（颜色、圆角、阴影、字号）/ <code>base.css</code> / <code>components.css</code>（玻璃卡、胶囊、分段控件、抽屉、表格、KPI 卡）/ 每页一个小文件。</li>
+      <li>新增 <code>charts.js</code>（柱、线、半环、热力）和 <code>components.js</code>（<code>kpiCard()</code>、<code>pill()</code>、<code>segmented()</code>、<code>drawer()</code>），各页面改为组合这些部件。</li>
+      <li><code>index.html</code> 的侧栏改为顶部导航和手机底部标签；<code>app.js</code> 的路由与权限判断不变。</li>
+      <li>沿用现有验收：隔离数据库 + <code>ui_smoke.mjs</code>，在 1440 / 1024 / 768 / 390 / 320 宽度截图检查；Python 测试为新接口补用例。</li>
+    </ul>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head">
+    <div class="eyebrow">07 · 分期</div>
+    <h2>分五步做，每步可单独上线</h2>
+    <p>每一步做完都能用，测试通过后在 main 上提交一次。</p>
+  </div>
+  <div class="box" style="padding-block:6px">
+    <div class="phase"><div class="p">P1</div><div><h3>设计基础与外壳</h3><p class="muted">颜色与材质变量、柔光背景、顶部导航、手机底部标签、按钮/输入/胶囊/分段控件，登录注册页。做完后所有页面先换上新外壳。</p></div></div>
+    <div class="phase"><div class="p">P2</div><div><h3>学习中心仪表盘</h3><p class="muted"><code>/api/dashboard</code>、用户设置表与接口、<code>charts.js</code>、自选专项抽屉。</p></div></div>
+    <div class="phase"><div class="p">P3</div><div><h3>答题页</h3><p class="muted">纸面题卡、玻璃答题卡、细进度胶囊、收藏与笔记重排，手机底部操作栏适配新样式。</p></div></div>
+    <div class="phase"><div class="p">P4</div><div><h3>统计页</h3><p class="muted">周期对比、学习日历热力、模块横条、筛选弹层。</p></div></div>
+    <div class="phase"><div class="p">P5</div><div><h3>题库、错题、管理页</h3><p class="muted">按题目/按试卷分段、错题科目分布、用户与数据管理表格，最后更新 DESIGN.md。</p></div></div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head">
+    <div class="eyebrow">08 · 待你确认</div>
+    <h2>开工前要定的几件事</h2>
+  </div>
+  <div class="grid2">
+    <div class="ask"><b>主色</b><span class="muted">由松绿提亮成知序青（方案默认），还是改成参考图那种青蓝？</span></div>
+    <div class="ask"><b>深色模式</b><span class="muted">参考图右上角有主题切换。要不要这轮一起做？会增加约 20% 工作量。</span></div>
+    <div class="ask"><b>考试日期与每日目标</b><span class="muted">需要新增设置表。做了首页才有倒计时和今日清单。</span></div>
+    <div class="ask"><b>侧栏改顶部导航</b><span class="muted">管理员入口收进"管理▾"下拉，普通用户看不到。</span></div>
+  </div>
+</section>
+
+</div>
+
+<script>
+(function(){
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  // 微型柱状/折线：同一刻度，0 值画成底部浅色短桩，最后一个点加强
+  document.querySelectorAll('svg.spark').forEach(svg => {
+    const color = css(svg.dataset.color), track = css('--m-track');
+    const W = 140, H = 46, pad = 3;
+    if (svg.dataset.bars) {
+      const v = svg.dataset.bars.split(',').map(Number), max = Math.max(...v), n = v.length, bw = W / n;
+      svg.innerHTML = v.map((x, i) => {
+        const h = x ? Math.max(3, (x / max) * (H - pad)) : 2;
+        const fill = x ? color : track;
+        const op = i === n - 1 ? 1 : 0.45;
+        return `<rect x="${(i * bw + bw * .2).toFixed(1)}" y="${(H - h).toFixed(1)}" width="${(bw * .6).toFixed(1)}" height="${h.toFixed(1)}" rx="1.5" fill="${fill}" fill-opacity="${x ? op : 1}"/>`;
+      }).join('');
+    } else {
+      const raw = svg.dataset.line.split(',').map(Number), n = raw.length;
+      const vals = raw.filter(Boolean), lo = Math.min(...vals) - 2, hi = Math.max(...vals) + 1;
+      const pts = raw.map((x, i) => x ? [i * (W - 6) / (n - 1) + 3, H - pad - ((x - lo) / (hi - lo)) * (H - pad * 2)] : null).filter(Boolean);
+      const d = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ');
+      const last = pts[pts.length - 1];
+      svg.innerHTML = `<path d="${d} L ${last[0].toFixed(1)} ${H} L ${pts[0][0].toFixed(1)} ${H} Z" fill="${color}" fill-opacity=".12"/><path d="${d}" fill="none" stroke="${color}" stroke-width="1.8" stroke-linejoin="round" vector-effect="non-scaling-stroke"/><circle cx="${last[0]}" cy="${last[1]}" r="3" fill="${color}"/>`;
+    }
+  });
+  // 科目掌握半环：三段，按正确率填充
+  const g = document.getElementById('gauge');
+  if (g) {
+    const cx = 100, cy = 100, r = 80, track = css('--m-track');
+    const segs = [[0, 60, css('--m-teal'), .82], [62, 118, css('--m-amber'), .61], [120, 180, css('--m-blue'), 0]];
+    const pt = a => { const t = Math.PI * (1 - a / 180); return [cx + r * Math.cos(t), cy - r * Math.sin(t)]; };
+    const arc = (a0, a1, c, w) => { const [x0, y0] = pt(a0), [x1, y1] = pt(a1); return `<path d="M${x0.toFixed(1)} ${y0.toFixed(1)} A${r} ${r} 0 0 1 ${x1.toFixed(1)} ${y1.toFixed(1)}" stroke="${c}" stroke-width="${w}" stroke-linecap="round" fill="none"/>`; };
+    let s = '';
+    segs.forEach(([a0, a1, c, f]) => { s += arc(a0, a1, track, 14); if (f) s += arc(a0, a0 + (a1 - a0) * f, c, 14); });
+    s += `<text x="100" y="78" text-anchor="middle" font-size="11" fill="${css('--m-sub')}">综合正确率</text><text x="100" y="102" text-anchor="middle" font-size="24" fill="${css('--m-ink')}" font-family="${css('--num')}">74%</text>`;
+    g.innerHTML = s;
+  }
+  // 答题卡
+  const sheet = document.getElementById('sheet');
+  if (sheet) {
+    const wrong = [4];
+    let h = '';
+    for (let i = 1; i <= 20; i++) h += `<b class="${i < 12 ? (wrong.includes(i) ? 'w' : 'r') : i === 12 ? 'w cur' : ''}">${i}</b>`;
+    sheet.innerHTML = h;
+  }
+})();
+</script>

@@ -1,0 +1,451 @@
+/* 页面基础、柔光背景、顶部导航与手机底部标签栏。 */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+[hidden] {
+  display: none !important;
+}
+html {
+  font-family: var(--font);
+  font-size: var(--fs-md);
+  line-height: 1.65;
+  color: var(--ink);
+  background: var(--ground);
+  font-synthesis: none;
+  -webkit-text-size-adjust: 100%;
+  scrollbar-color: var(--line-strong) transparent;
+}
+body {
+  margin: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
+  /* html 铺底色；body 透明，柔光层（z-index:-1）才能显示在内容之下、底色之上 */
+  background: transparent;
+  color: var(--ink);
+}
+::selection {
+  background: var(--primary-soft);
+  color: var(--ink);
+}
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+input,
+textarea {
+  caret-color: var(--primary);
+}
+h1,
+h2,
+h3,
+h4 {
+  margin: 0;
+  line-height: 1.3;
+  text-wrap: balance;
+  font-weight: 650;
+}
+p {
+  margin: 0;
+}
+a {
+  color: inherit;
+  text-decoration: none;
+  text-underline-offset: 3px;
+}
+img {
+  max-width: 100%;
+}
+code,
+kbd,
+pre {
+  font-family: var(--font-mono);
+}
+.num,
+time,
+.tabular {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 10px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 柔光背景：四团静止色场，固定在视口，不随页面滚动，也不做动画。 */
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(42% 52% at 6% 4%, var(--glow-a), transparent 72%),
+    radial-gradient(34% 44% at 94% 10%, var(--glow-d), transparent 72%),
+    radial-gradient(40% 46% at 70% 96%, var(--glow-c), transparent 72%),
+    radial-gradient(30% 40% at 22% 78%, var(--glow-b), transparent 72%),
+    var(--ground);
+}
+body.is-practice .backdrop {
+  opacity: 0.55;
+}
+
+/* 玻璃材质：只用在外壳、仪表卡、侧板、抽屉和弹窗上。 */
+.glass {
+  background: var(--glass);
+  border: 1px solid var(--glass-line);
+  box-shadow: var(--shadow-1);
+  -webkit-backdrop-filter: var(--blur);
+  backdrop-filter: var(--blur);
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass {
+    background: var(--glass-fallback);
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .glass {
+    background: var(--glass-fallback);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+.paper {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-1);
+}
+
+.skip-link {
+  position: fixed;
+  left: 16px;
+  top: -60px;
+  z-index: 100;
+  padding: 10px 16px;
+  border-radius: var(--r-pill);
+  background: var(--ink);
+  color: var(--paper);
+}
+.skip-link:focus {
+  top: 12px;
+}
+
+/* ---------- 顶部悬浮导航 ---------- */
+.appbar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  padding: 12px max(20px, env(safe-area-inset-right, 0px)) 0 max(20px, env(safe-area-inset-left, 0px));
+}
+.appbar-inner {
+  max-width: var(--content);
+  margin: 0 auto;
+  height: var(--bar-h);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 8px 0 10px;
+  border-radius: var(--r-pill);
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 4px 10px 4px 4px;
+  border-radius: var(--r-pill);
+  font-weight: 700;
+  font-size: var(--fs-lg);
+  letter-spacing: 0.04em;
+  flex: none;
+}
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  background: linear-gradient(140deg, var(--primary), var(--primary-hover));
+  color: var(--on-strong);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0;
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--primary) 35%, transparent);
+}
+.main-nav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+.main-nav a {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 38px;
+  padding: 0 14px;
+  border-radius: var(--r-pill);
+  color: var(--ink-2);
+  font-size: var(--fs-md);
+  white-space: nowrap;
+  transition:
+    background var(--t) var(--ease),
+    color var(--t) var(--ease);
+}
+.main-nav a .icon {
+  width: 18px;
+  height: 18px;
+}
+.main-nav a:hover {
+  background: var(--glass-strong);
+  color: var(--ink);
+}
+.main-nav a.active {
+  background: var(--ink);
+  color: var(--paper);
+}
+.main-nav .nav-sep {
+  width: 1px;
+  height: 20px;
+  margin: 0 6px;
+  background: var(--line-strong);
+}
+.appbar-tools {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+.global-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.global-search .icon {
+  position: absolute;
+  left: 12px;
+  width: 17px;
+  height: 17px;
+  color: var(--ink-3);
+  pointer-events: none;
+}
+.global-search input {
+  width: 220px;
+  height: 38px;
+  padding: 0 14px 0 36px;
+  border: 1px solid transparent;
+  border-radius: var(--r-pill);
+  background: var(--glass-strong);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-sm);
+  transition:
+    width var(--t) var(--ease),
+    border-color var(--t);
+}
+.global-search input::placeholder {
+  color: var(--ink-3);
+}
+.global-search input:focus {
+  width: 280px;
+  border-color: var(--primary);
+  outline: none;
+}
+.icon-button {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--glass-strong);
+  color: var(--ink-2);
+  cursor: pointer;
+  transition:
+    background var(--t),
+    color var(--t);
+}
+.icon-button:hover {
+  color: var(--ink);
+  background: var(--paper);
+}
+.icon-button .icon {
+  width: 18px;
+  height: 18px;
+}
+.account-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 14px 0 4px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--glass-strong);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+.account-chip:hover {
+  background: var(--paper);
+}
+.avatar {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: linear-gradient(140deg, #f6b26b, var(--amber));
+  color: #fff;
+  font-weight: 650;
+  font-size: var(--fs-sm);
+  text-transform: uppercase;
+  flex: none;
+}
+.avatar.large {
+  width: 52px;
+  height: 52px;
+  font-size: var(--fs-xl);
+}
+
+/* ---------- 主内容 ---------- */
+#app {
+  max-width: var(--content);
+  margin: 0 auto;
+  padding: 26px max(20px, env(safe-area-inset-right, 0px)) 64px max(20px, env(safe-area-inset-left, 0px));
+  outline: none;
+}
+.route-view {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+.page-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 6px 4px 0;
+}
+.page-heading h1 {
+  font-size: var(--fs-2xl);
+  letter-spacing: 0.01em;
+}
+.page-heading p {
+  margin-top: 4px;
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+}
+
+/* 登录页与答题页不显示全局导航 */
+body.is-auth .appbar,
+body.is-practice .appbar {
+  display: none;
+}
+body.is-practice #app {
+  padding-top: 14px;
+}
+
+/* ---------- 中屏 ---------- */
+@media (max-width: 1240px) {
+  .global-search input,
+  .global-search input:focus {
+    width: 160px;
+  }
+}
+@media (max-width: 1080px) {
+  .global-search {
+    display: none;
+  }
+  .main-nav a {
+    padding: 0 11px;
+  }
+}
+@media (max-width: 900px) {
+  .account-chip #account-name {
+    display: none;
+  }
+  .account-chip {
+    padding: 0 4px;
+  }
+}
+
+/* ---------- 手机：导航移到底部 ---------- */
+@media (max-width: 760px) {
+  .appbar {
+    padding: 8px max(12px, env(safe-area-inset-right, 0px)) 0 max(12px, env(safe-area-inset-left, 0px));
+  }
+  .appbar-inner {
+    height: 50px;
+    padding: 0 6px 0 6px;
+  }
+  .main-nav {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 45;
+    justify-content: space-around;
+    gap: 0;
+    padding: 6px max(6px, env(safe-area-inset-right, 0px)) calc(6px + env(safe-area-inset-bottom, 0px))
+      max(6px, env(safe-area-inset-left, 0px));
+    background: var(--glass-strong);
+    border-top: 1px solid var(--glass-line);
+    -webkit-backdrop-filter: var(--blur);
+    backdrop-filter: var(--blur);
+    box-shadow: 0 -6px 20px rgba(20, 45, 64, 0.06);
+  }
+  .main-nav a {
+    flex: 1 1 0;
+    min-width: 0;
+    height: auto;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px 2px;
+    border-radius: var(--r-md);
+    font-size: 11px;
+    line-height: 1.2;
+  }
+  .main-nav a .icon {
+    width: 21px;
+    height: 21px;
+  }
+  .main-nav a.active {
+    background: var(--primary-soft);
+    color: var(--primary-ink);
+  }
+  .main-nav .nav-sep {
+    display: none;
+  }
+  #app {
+    padding: 18px max(14px, env(safe-area-inset-right, 0px)) calc(96px + env(safe-area-inset-bottom, 0px))
+      max(14px, env(safe-area-inset-left, 0px));
+  }
+  body.is-practice #app {
+    padding-bottom: calc(110px + env(safe-area-inset-bottom, 0px));
+  }
+  .page-heading h1 {
+    font-size: 22px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

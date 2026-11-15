@@ -10,8 +10,8 @@ import { renderUsers } from "./users.js";
 let routeToken = 0;
 const names = {
   home: "学习中心",
-  library: "我的题库",
-  review: "错题与收藏",
+  library: "题库",
+  review: "错题收藏",
   stats: "学习统计",
   data: "数据管理",
   users: "用户管理",
@@ -60,13 +60,12 @@ async function route() {
   if (ADMIN_VIEWS.includes(view) && !isAdmin()) view = "home";
   document.body.classList.toggle("is-practice", view === "practice");
   if (view !== "practice") document.body.classList.remove("focus-mode");
-  $$("nav a").forEach((a) => {
+  $$(".main-nav a").forEach((a) => {
     const active = a.dataset.route === view;
     a.classList.toggle("active", active);
     if (active) a.setAttribute("aria-current", "page");
     else a.removeAttribute("aria-current");
   });
-  $("#route-name").textContent = names[view] || names.home;
   document.title = `${names[view] || names.home} · 知序`;
   root.innerHTML =
     '<div class="loading-state" role="status"><div class="skeleton skeleton-title"></div><div class="skeleton skeleton-panel"></div><p>正在载入学习档案…</p></div>';
@@ -100,12 +99,41 @@ function signedOut() {
   route();
 }
 
-$("#today").textContent = new Intl.DateTimeFormat("zh-CN", {
-  timeZone: "Asia/Shanghai",
-  month: "long",
-  day: "numeric",
-  weekday: "short",
-}).format(new Date());
+const THEMES = {
+  system: ["system", "主题：跟随系统，点击切换为浅色"],
+  light: ["sun", "主题：浅色，点击切换为深色"],
+  dark: ["moon", "主题：深色，点击切换为跟随系统"],
+};
+function paintTheme() {
+  const mode = document.documentElement.dataset.theme || "system";
+  const [symbol, label] = THEMES[mode];
+  const button = $("#theme-toggle");
+  button.innerHTML = icon(symbol);
+  button.setAttribute("aria-label", label);
+  button.title = label;
+}
+$("#theme-toggle").onclick = () => {
+  const order = ["system", "light", "dark"];
+  const mode = document.documentElement.dataset.theme || "system";
+  const next = order[(order.indexOf(mode) + 1) % order.length];
+  if (next === "system") delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = next;
+  try {
+    if (next === "system") localStorage.removeItem("finreg-theme");
+    else localStorage.setItem("finreg-theme", next);
+  } catch {}
+  paintTheme();
+};
+paintTheme();
+$("#global-search").insertAdjacentHTML("afterbegin", icon("search"));
+$("#global-search").onsubmit = (event) => {
+  event.preventDefault();
+  const input = $("#global-search-input");
+  const q = input.value.trim();
+  location.hash = q ? `library?search=${encodeURIComponent(q)}` : "library";
+  input.value = "";
+  input.blur();
+};
 $$("[data-icon]").forEach((a) =>
   a.insertAdjacentHTML("afterbegin", icon(a.dataset.icon)),
 );

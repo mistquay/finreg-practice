@@ -2,63 +2,61 @@
 <html lang="zh-CN" data-type="software">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <meta name="theme-color" content="#315c46" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <meta name="theme-color" content="#e9eff3" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0c1419" media="(prefers-color-scheme: dark)" />
+    <meta name="color-scheme" content="light dark" />
     <meta name="page-type" content="software" />
     <meta name="site-kind" content="software" />
     <meta
       name="description"
-      content="知序，个人金融监管备考工作台。专项练习、真题、错题复习与学习记录，都保存在本地。"
+      content="知序，金融监管备考工作台。专项练习、真题、错题复习与学习记录。"
     />
     <title>知序 · 金融监管备考</title>
     <link
       rel="icon"
-      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Crect width='48' height='48' rx='10' fill='%23315c46'/%3E%3Cpath d='M12 14h24L12 34h24' stroke='%23fff' stroke-width='4' fill='none'/%3E%3C/svg%3E"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Crect width='48' height='48' rx='12' fill='%231572a1'/%3E%3Cpath d='M13 15h22L13 33h22' stroke='%23fff' stroke-width='4' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E"
     />
-    <link rel="stylesheet" href="/style.css" />
+    <script src="/theme.js"></script>
+    <link rel="stylesheet" href="/legacy.css" />
+    <link rel="stylesheet" href="/tokens.css" />
+    <link rel="stylesheet" href="/base.css" />
+    <link rel="stylesheet" href="/components.css" />
+    <link rel="stylesheet" href="/pages.css" />
   </head>
   <body>
     <a class="skip-link" href="#app">跳到主要内容</a>
-    <aside class="sidebar">
-      <a class="brand" href="#home" aria-label="知序，学习中心"
-        ><span class="brand-mark">知</span
-        ><span>知序<small>金融监管备考</small></span></a
-      >
-      <div class="sidebar-label">学习空间</div>
-      <nav aria-label="主导航">
-        <a href="#home" data-route="home" data-icon="home">学习中心</a>
-        <a href="#library" data-route="library" data-icon="book">我的题库</a>
-        <a href="#review" data-route="review" data-icon="bookmark">错题收藏</a>
-        <a href="#stats" data-route="stats" data-icon="chart">学习统计</a>
-        <a href="#data" data-route="data" data-icon="database" data-admin hidden>数据管理</a>
-        <a href="#users" data-route="users" data-icon="users" data-admin hidden>用户管理</a>
-      </nav>
-      <div class="sidebar-foot">
-        <span class="dot"></span>个人学习档案<small
-          >作答、收藏与笔记只有自己可见。</small
-        >
+    <div class="backdrop" aria-hidden="true"></div>
+    <header class="appbar">
+      <div class="appbar-inner glass">
+        <a class="brand" href="#home" aria-label="知序，学习中心"><span class="brand-mark">知</span><span>知序</span></a>
+        <nav class="main-nav" aria-label="主导航">
+          <a href="#home" data-route="home" data-icon="home"><span>学习中心</span></a>
+          <a href="#library" data-route="library" data-icon="book"><span>题库</span></a>
+          <a href="#review" data-route="review" data-icon="bookmark"><span>错题收藏</span></a>
+          <a href="#stats" data-route="stats" data-icon="chart"><span>统计</span></a>
+          <span class="nav-sep" data-admin hidden></span>
+          <a href="#data" data-route="data" data-icon="database" data-admin hidden><span>数据</span></a>
+          <a href="#users" data-route="users" data-icon="users" data-admin hidden><span>用户</span></a>
+        </nav>
+        <div class="appbar-tools">
+          <form class="global-search" role="search" id="global-search">
+            <label class="visually-hidden" for="global-search-input">搜索题目</label>
+            <input id="global-search-input" type="search" placeholder="搜索题干、考点、解析" autocomplete="off" />
+          </form>
+          <button class="icon-button" id="theme-toggle" type="button"></button>
+          <button class="account-chip" id="account-button" type="button" hidden aria-haspopup="dialog">
+            <span class="avatar" id="account-initial" aria-hidden="true"></span><span id="account-name"></span>
+          </button>
+        </div>
       </div>
-    </aside>
-    <div class="shell">
-      <header class="topbar">
-        <div class="breadcrumb">
-          我的备考空间 <span>/</span> <strong id="route-name">学习中心</strong>
-        </div>
-        <div>
-          <button class="account-chip" id="account-button" hidden aria-haspopup="dialog"><span class="avatar" id="account-initial" aria-hidden="true"></span><span id="account-name"></span></button
-          ><time id="today"></time>
-        </div>
-      </header>
-      <main id="app" tabindex="-1" aria-label="学习工作区">
-        <div class="empty">正在载入题库…</div>
-      </main>
-      <footer class="footnote">
-        <span>知序 · 每一次练习，都有迹可循</span
-        ><span>个人档案 · 来源可追溯</span>
-      </footer>
-    </div>
+    </header>
+    <main id="app" tabindex="-1" aria-label="学习工作区">
+      <div class="empty">正在载入题库…</div>
+    </main>
     <div id="toast" role="status" aria-live="polite"></div>
-    <dialog id="dialog" aria-label="题目与练习详情"></dialog>
+    <dialog id="dialog" aria-label="详情"></dialog>
+    <dialog id="drawer" class="drawer" aria-label="自选专项"></dialog>
     <script type="module" src="/app.js"></script>
   </body>
 </html>

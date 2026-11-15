@@ -1,0 +1,184 @@
+/* 知序 · 晨雾玻璃 —— 颜色、材质、字号与间距。
+   亮色写在 :root；深色两处写法一致：跟随系统（未手动选择）与手动选择深色。 */
+:root {
+  /* 底与光 */
+  --ground: #e9eff3;
+  --glow-a: rgba(96, 186, 226, 0.5);
+  --glow-b: rgba(120, 214, 200, 0.42);
+  --glow-c: rgba(255, 196, 128, 0.42);
+  --glow-d: rgba(170, 186, 255, 0.4);
+
+  /* 材质：玻璃承载外壳与仪表，纸面承载阅读 */
+  --glass: rgba(255, 255, 255, 0.62);
+  --glass-strong: rgba(255, 255, 255, 0.82);
+  --glass-line: rgba(255, 255, 255, 0.8);
+  --glass-fallback: rgba(250, 252, 253, 0.94);
+  --paper: #ffffff;
+  --paper-sunk: #f4f7f9;
+  --line: #e1e8ed;
+  --line-strong: #cbd6de;
+  --track: #e3eaef;
+
+  /* 文字 */
+  --ink: #13232e;
+  --ink-2: #4b5d6b;
+  --ink-3: #66798a;
+  --on-strong: #ffffff;
+
+  /* 主色：青蓝 */
+  --primary: #1572a1;
+  --primary-hover: #0f5f88;
+  --primary-soft: #e0eff7;
+  --primary-ink: #0d5a80;
+
+  /* 琥珀：当前、提醒、多选 */
+  --amber: #e2832a;
+  --amber-soft: #fcecd9;
+  --amber-ink: #95500f;
+
+  /* 语义 */
+  --good: #1d9460;
+  --good-soft: #dbf2e6;
+  --good-ink: #146b45;
+  --bad: #d4463d;
+  --bad-soft: #fbe3e1;
+  --bad-ink: #a6302a;
+  --violet: #5b6ee0;
+  --violet-soft: #e5e9fc;
+
+  /* 深度 */
+  --shadow-1: 0 1px 2px rgba(20, 45, 64, 0.05), 0 6px 20px rgba(20, 45, 64, 0.06);
+  --shadow-2: 0 2px 6px rgba(20, 45, 64, 0.06), 0 18px 44px rgba(20, 45, 64, 0.12);
+  --blur: blur(22px) saturate(160%);
+  --focus: #1572a1;
+  --scrim: rgba(14, 28, 38, 0.32);
+
+  /* 字体：系统中文字体，数字用等宽数字 */
+  --font: "PingFang SC", "HarmonyOS Sans SC", "MiSans", "Microsoft YaHei UI", "Microsoft YaHei",
+    "Noto Sans SC", "Segoe UI", system-ui, sans-serif;
+  --font-num: "Segoe UI Variable Display", "SF Pro Display", "Segoe UI", "Roboto", "PingFang SC",
+    "Microsoft YaHei UI", sans-serif;
+  --font-mono: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+
+  /* 字号 */
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-md: 15px;
+  --fs-lg: 17px;
+  --fs-xl: 20px;
+  --fs-2xl: 26px;
+  --fs-num: 30px;
+  --fs-stem: 18px;
+
+  /* 形状与间距 */
+  --r-sm: 10px;
+  --r-md: 14px;
+  --r-lg: 20px;
+  --r-pill: 999px;
+  --gap: 14px;
+  --pad: 18px;
+  --content: 1440px;
+  --bar-h: 56px;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --t: 160ms;
+
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground: #0c1419;
+    --glow-a: rgba(36, 120, 164, 0.3);
+    --glow-b: rgba(28, 120, 108, 0.24);
+    --glow-c: rgba(150, 92, 30, 0.2);
+    --glow-d: rgba(70, 80, 170, 0.22);
+    --glass: rgba(22, 33, 41, 0.66);
+    --glass-strong: rgba(26, 38, 47, 0.86);
+    --glass-line: rgba(255, 255, 255, 0.08);
+    --glass-fallback: rgba(20, 30, 37, 0.96);
+    --paper: #141e25;
+    --paper-sunk: #101920;
+    --line: #24323c;
+    --line-strong: #33444f;
+    --track: #24333d;
+    --ink: #e5edf2;
+    --ink-2: #a7b6c1;
+    --ink-3: #8798a5;
+    --on-strong: #07202d;
+    --primary: #5bb8e6;
+    --primary-hover: #7cc8ee;
+    --primary-soft: rgba(91, 184, 230, 0.16);
+    --primary-ink: #8fd0f0;
+    --amber: #f0a256;
+    --amber-soft: rgba(240, 162, 86, 0.16);
+    --amber-ink: #f6bd84;
+    --good: #45c78a;
+    --good-soft: rgba(69, 199, 138, 0.15);
+    --good-ink: #7ad9aa;
+    --bad: #f0746b;
+    --bad-soft: rgba(240, 116, 107, 0.15);
+    --bad-ink: #f6a19a;
+    --violet: #8f9cf2;
+    --violet-soft: rgba(143, 156, 242, 0.16);
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.22);
+    --shadow-2: 0 2px 8px rgba(0, 0, 0, 0.35), 0 22px 50px rgba(0, 0, 0, 0.4);
+    --focus: #7cc8ee;
+    --scrim: rgba(0, 0, 0, 0.5);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --ground: #0c1419;
+  --glow-a: rgba(36, 120, 164, 0.3);
+  --glow-b: rgba(28, 120, 108, 0.24);
+  --glow-c: rgba(150, 92, 30, 0.2);
+  --glow-d: rgba(70, 80, 170, 0.22);
+  --glass: rgba(22, 33, 41, 0.66);
+  --glass-strong: rgba(26, 38, 47, 0.86);
+  --glass-line: rgba(255, 255, 255, 0.08);
+  --glass-fallback: rgba(20, 30, 37, 0.96);
+  --paper: #141e25;
+  --paper-sunk: #101920;
+  --line: #24323c;
+  --line-strong: #33444f;
+  --track: #24333d;
+  --ink: #e5edf2;
+  --ink-2: #a7b6c1;
+  --ink-3: #8798a5;
+  --on-strong: #07202d;
+  --primary: #5bb8e6;
+  --primary-hover: #7cc8ee;
+  --primary-soft: rgba(91, 184, 230, 0.16);
+  --primary-ink: #8fd0f0;
+  --amber: #f0a256;
+  --amber-soft: rgba(240, 162, 86, 0.16);
+  --amber-ink: #f6bd84;
+  --good: #45c78a;
+  --good-soft: rgba(69, 199, 138, 0.15);
+  --good-ink: #7ad9aa;
+  --bad: #f0746b;
+  --bad-soft: rgba(240, 116, 107, 0.15);
+  --bad-ink: #f6a19a;
+  --violet: #8f9cf2;
+  --violet-soft: rgba(143, 156, 242, 0.16);
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.22);
+  --shadow-2: 0 2px 8px rgba(0, 0, 0, 0.35), 0 22px 50px rgba(0, 0, 0, 0.4);
+  --focus: #7cc8ee;
+  --scrim: rgba(0, 0, 0, 0.5);
+  color-scheme: dark;
+}
+
+/* 旧样式表（过渡期）使用的变量名，映射到新色板。全部页面重写后随 legacy.css 一起删除。 */
+:root {
+  --muted: var(--ink-2);
+  --nav: var(--primary);
+  --blue: var(--primary);
+  --blue-soft: var(--primary-soft);
+  --teal: var(--good);
+  --teal-soft: var(--good-soft);
+  --red: var(--bad);
+  --red-soft: var(--bad-soft);
+  --bg: var(--ground);
+  --card: var(--paper);
+  --radius: var(--r-lg);
+}
