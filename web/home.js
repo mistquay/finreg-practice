@@ -49,17 +49,29 @@ function readyBy(facets, key, filter = () => true) {
   return counts;
 }
 
-function continueHTML(resume, activeCount) {
-  const others =
-    activeCount > 1
-      ? `<small class="continue-more">另有 ${activeCount - 1} 个未完成练习，见右侧“最近练习”。</small>`
-      : "";
-  if (!resume)
-    return `<section class="continue-panel" aria-labelledby="continue-title"><div class="continue-copy"><span class="status-label">${icon("book")}为今天留一点学习时间</span><h2 id="continue-title">选一个专项，开始进入状态。</h2><p>专业课、行测与申论，按你的节奏练习。</p><a class="button primary" href="#library">浏览题库${icon("arrow")}</a></div>${noteArt()}</section>`;
-  const progress = resume.answered
-    ? `已提交 ${resume.answered} / ${resume.total} 题`
-    : `上次停在第 ${resume.position + 1} 题 · 共 ${resume.total} 题`;
-  return `<section class="continue-panel" aria-labelledby="continue-title"><div class="continue-copy"><span class="status-label">${icon("bookmark")}上次的练习，还可以继续</span><h2 id="continue-title">${esc(resume.title)}</h2><p>${progress}${resume.mode === "exam" ? " · 考试模式，草稿已保留" : "，草稿已保留"}</p><div class="toolbar"><a class="button primary" href="#practice/${resume.id}">继续上次练习${icon("arrow")}</a><button class="quiet" data-discard="${resume.id}">放弃这次练习</button></div>${others}</div>${noteArt()}</section>`;
+const accuracy = (s) =>
+  s.graded ? pct(Math.round((s.correct / s.graded) * 1000) / 10) : null;
+
+// The top panel: an unfinished session with real progress, else the round just finished, else a prompt.
+function continueHTML(resume, finished, othersCount) {
+  const others = othersCount
+    ? `<small class="continue-more">另有 ${othersCount} 个未完成练习，见右侧“最近练习”。</small>`
+    : "";
+  if (resume) {
+    const progress =
+      resume.mode === "exam"
+        ? `考试模式 · 已填写 ${resume.filled} / ${resume.total} 题，交卷后统一判分`
+        : `已答 ${resume.answered} / ${resume.total} 题 · 上次看到第 ${resume.position + 1} 题`;
+    return `<section class="continue-panel" aria-labelledby="continue-title"><div class="continue-copy"><span class="status-label">${icon("bookmark")}上次的练习还没做完</span><h2 id="continue-title">${esc(resume.title)}</h2><p>${progress}</p><div class="toolbar"><a class="button primary" href="#practice/${resume.id}">继续上次练习${icon("arrow")}</a><button class="quiet" data-discard="${resume.id}">放弃这次练习</button></div>${others}</div>${noteArt()}</section>`;
+  }
+  if (finished) {
+    const wrong = finished.graded - finished.correct;
+    const result = finished.graded
+      ? `答对 ${finished.correct} / ${finished.graded} 题 · 正确率 ${accuracy(finished)}${wrong ? ` · ${wrong} 道错题已收进错题本` : ""}`
+      : `已完成 ${finished.answered} 题`;
+    return `<section class="continue-panel" aria-labelledby="continue-title"><div class="continue-copy"><span class="status-label">${icon("check")}上一轮已完成</span><h2 id="continue-title">${esc(finished.title)}</h2><p>${result}</p><div class="toolbar"><button class="primary" id="next-round">开始下一组${icon("arrow")}</button><a class="button secondary" href="#practice/${finished.id}">查看复盘</a></div></div>${noteArt()}</section>`;
+  }
+  return `<section class="continue-panel" aria-labelledby="continue-title"><div class="continue-copy"><span class="status-label">${icon("book")}为今天留一点学习时间</span><h2 id="continue-title">选一个专项，开始进入状态。</h2><p>专业课、行测与申论，按你的节奏练习。</p><a class="button primary" href="#library">浏览题库${icon("arrow")}</a></div>${noteArt()}</section>`;
 }
 
 function noteArt() {
@@ -68,7 +80,21 @@ function noteArt() {
 
 function sessionHTML(s) {
   const done = s.status === "completed";
-  return `<div class="session-item"><a href="#practice/${s.id}"><span class="session-status ${done ? "done" : ""}">${icon(done ? "check" : "clock")}</span><div><strong>${esc(s.title)}</strong><small>${s.created_at.slice(5, 16).replace("T", " ")} · ${s.total} 题${s.answered ? ` · 已答 ${s.answered}` : ""}</small><span>${done ? "查看复盘" : "继续练习"}</span></div>${icon("arrow")}</a>${done ? "" : `<button class="quiet discard" data-discard="${s.id}" aria-label="放弃：${esc(s.title)}">放弃</button>`}</div>`;
+  const [symbol, tone, action] = done
+    ? ["check", "done", "查看复盘"]
+    : s.started
+      ? ["clock", "", "继续练习"]
+      : ["book", "idle", "未开始 · 点击开始"];
+  const detail = done
+    ? s.graded
+      ? ` · 正确率 ${accuracy(s)}`
+      : ` · 已答 ${s.answered}`
+    : s.started
+      ? s.mode === "exam"
+        ? ` · 已填 ${s.filled}`
+        : ` · 已答 ${s.answered}`
+      : "";
+  return `<div class="session-item"><a href="#practice/${s.id}"><span class="session-status ${tone}">${icon(symbol)}</span><div><strong>${esc(s.title)}</strong><small>${s.updated_at.slice(5, 16).replace("T", " ")} · ${s.total} 题${detail}</small><span>${action}</span></div>${icon("arrow")}</a>${done ? "" : `<button class="quiet discard" data-discard="${s.id}" aria-label="放弃：${esc(s.title)}">放弃</button>`}</div>`;
 }
 
 export async function renderHome(root, meta) {
@@ -84,7 +110,13 @@ export async function renderHome(root, meta) {
     paperSubject: "计算机专业",
     paperLimit: PAPER_PAGE,
   };
-  const active = meta.sessions.filter((s) => s.status === "active");
+  // Sessions arrive most recently active first; untouched ones are listed but never promoted.
+  const inProgress = meta.sessions.filter(
+    (s) => s.status === "active" && s.started,
+  );
+  const latest = meta.sessions[0];
+  const finished =
+    !inProgress.length && latest?.status === "completed" ? latest : null;
   root.innerHTML =
     heading(
       "今天，从一道题开始。",
@@ -93,7 +125,7 @@ export async function renderHome(root, meta) {
     ) +
     `<div class="home-columns">
       <div class="home-main">
-        ${continueHTML(active[0], active.length)}
+        ${continueHTML(inProgress[0], finished, inProgress.length - 1)}
         <section class="practice-builder" aria-labelledby="module-title"><div class="section-title"><h2 id="module-title">专项练习</h2><span>科目可多选；只选一科时可再选小类</span></div><div class="subject-list">${
           available
             .map(
@@ -264,6 +296,19 @@ export async function renderHome(root, meta) {
       }),
   );
   papers();
+
+  const next = $("#next-round", root);
+  if (next)
+    next.onclick = () => {
+      const builder = $(".practice-builder", root);
+      builder.scrollIntoView({
+        block: "start",
+        behavior: matchMedia("(prefers-reduced-motion: reduce)").matches
+          ? "auto"
+          : "smooth",
+      });
+      $("#quick-start", root)?.focus({ preventScroll: true });
+    };
 
   $$("[data-discard]", root).forEach(
     (b) =>

@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS invites(
 CREATE TABLE IF NOT EXISTS sessions(
     id TEXT PRIMARY KEY, created_at TEXT NOT NULL, mode TEXT NOT NULL, title TEXT,
     question_ids TEXT NOT NULL, status TEXT DEFAULT 'active', position INTEGER DEFAULT 0,
-    drafts TEXT DEFAULT '{}', user_id INTEGER REFERENCES users(id));
+    drafts TEXT DEFAULT '{}', user_id INTEGER REFERENCES users(id), updated_at TEXT);
 CREATE TABLE IF NOT EXISTS attempts(
     id INTEGER PRIMARY KEY AUTOINCREMENT, question_id TEXT NOT NULL REFERENCES questions(id),
     session_id TEXT REFERENCES sessions(id), selected TEXT NOT NULL, correct INTEGER,
@@ -56,7 +56,8 @@ CREATE TABLE IF NOT EXISTS marks(
 # Study records belong to a user. Rows from before accounts existed keep user_id NULL until the
 # first account is created, which then takes them over (see auth.create_user).
 USER_INDEXES = '''
-CREATE INDEX IF NOT EXISTS sessions_user ON sessions(user_id, created_at);
+DROP INDEX IF EXISTS sessions_user;
+CREATE INDEX IF NOT EXISTS sessions_user_activity ON sessions(user_id, updated_at);
 CREATE INDEX IF NOT EXISTS attempts_user_question ON attempts(user_id, question_id, id);
 CREATE INDEX IF NOT EXISTS auth_sessions_user ON auth_sessions(user_id);
 '''
@@ -65,7 +66,7 @@ CREATE INDEX IF NOT EXISTS auth_sessions_user ON auth_sessions(user_id);
 MIGRATIONS = {
     'papers': {name: "TEXT NOT NULL DEFAULT ''" for name in ('subject', 'kind', 'exam_level')},
     'questions': {'edited': 'INTEGER NOT NULL DEFAULT 0'},
-    'sessions': {'user_id': 'INTEGER REFERENCES users(id)'},
+    'sessions': {'user_id': 'INTEGER REFERENCES users(id)', 'updated_at': 'TEXT'},
     'attempts': {'user_id': 'INTEGER REFERENCES users(id)'},
 }
 
@@ -163,6 +164,8 @@ def initialize():
                 INSERT INTO marks(user_id, question_id, favorite, note)
                     SELECT NULL, question_id, favorite, note FROM marks_legacy;
                 DROP TABLE marks_legacy;''')
+        # Sessions from before activity tracking count as last active when they were created.
+        conn.execute('UPDATE sessions SET updated_at=created_at WHERE updated_at IS NULL')
         conn.executescript(USER_INDEXES)
         # Seed from the rebuildable bank files on first start; papers already stored are left alone.
         for bank in (ROOT / 'data/bank.json', ROOT / 'data/fenbi-bank.json'):

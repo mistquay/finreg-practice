@@ -130,14 +130,34 @@ def metadata(uid):
             WHERE a.user_id=? AND {COUNTED} GROUP BY q.paper_id''', (uid,)).fetchall())
         for paper in papers:
             paper['done'] = done.get(paper['id'], 0)
-        sessions = [dict(r) for r in c.execute('''SELECT id, title, mode, created_at, status, position,
-            json_array_length(question_ids) total,
-            (SELECT count(*) FROM attempts a WHERE a.session_id=sessions.id) answered
-            FROM sessions WHERE user_id=? ORDER BY created_at DESC LIMIT 12''', (uid,))]
+        sessions = [_session_summary(r) for r in c.execute('''SELECT id, title, mode, created_at, updated_at,
+            status, position, drafts, json_array_length(question_ids) total,
+            (SELECT count(*) FROM attempts a WHERE a.session_id=sessions.id) answered,
+            (SELECT count(*) FROM attempts a WHERE a.session_id=sessions.id AND a.correct=1) correct,
+            (SELECT count(*) FROM attempts a WHERE a.session_id=sessions.id AND a.correct IS NOT NULL) graded
+            FROM sessions WHERE user_id=? ORDER BY updated_at DESC LIMIT 12''', (uid,))]
     return {'papers': papers, 'facets': facets, 'tags': tags, 'counts': counts, 'sessions': sessions}
 
 
 # ---------------------------------------------------------------- sessions
+
+def _filled(selected):
+    return isinstance(selected, list) and any(isinstance(x, str) and x.strip() for x in selected)
+
+
+def _session_summary(row):
+    """Home-page view of a session: `started` once anything has been answered or filled in."""
+    session = dict(row)
+    drafts = json.loads(session.pop('drafts') or '{}')
+    session['filled'] = sum(1 for key, draft in drafts.items()
+                            if not key.startswith('__') and isinstance(draft, dict) and _filled(draft.get('selected')))
+    session['started'] = bool(session['answered'] or session['filled'])
+    return session
+
+
+def _touch(conn, sid):
+    conn.execute('UPDATE sessions SET updated_at=? WHERE id=?', (now(), sid))
+
 
 def create_session(uid, data):
     mode = data.get('mode', 'practice')
@@ -182,8 +202,9 @@ def create_session(uid, data):
             raise ValueError('当前条件下没有可练习题目；待核验题默认不参与组卷。')
         sid = uuid.uuid4().hex
         title = str(data.get('title') or MODE_TITLES[mode])[:120]
-        c.execute('INSERT INTO sessions(id,created_at,mode,title,question_ids,user_id) VALUES(?,?,?,?,?,?)',
-                  (sid, now(), mode, title, json.dumps(ids), uid))
+        created = now()
+        c.execute('''INSERT INTO sessions(id,created_at,updated_at,mode,title,question_ids,user_id)
+            VALUES(?,?,?,?,?,?,?)''', (sid, created, created, mode, title, json.dumps(ids), uid))
     return get_session(uid, sid)
 
 
@@ -317,8 +338,8 @@ def update_session(uid, sid, data):
         drafts = _drafts(session, data)
         if drafts.get('__updated', 0) < session['drafts'].get('__updated', 0):
             return dict(saved=True, stale=True, status='active', position=session['position'])
-        conn.execute('UPDATE sessions SET position=?,drafts=? WHERE id=?',
-                     (position, json.dumps(drafts, ensure_ascii=False), sid))
+        conn.execute('UPDATE sessions SET position=?,drafts=?,updated_at=? WHERE id=?',
+                     (position, json.dumps(drafts, ensure_ascii=False), now(), sid))
     return dict(saved=True, status='active', position=position)
 
 
@@ -336,7 +357,9 @@ def answer(uid, sid, data):
         if session['status'] != 'active' and not old:
             raise ValueError('练习已结束')
         question = _load_questions(conn, [qid])[qid]
-        return _record_answer(conn, session, question, data.get('selected'), data.get('elapsed_ms', 0))
+        result = _record_answer(conn, session, question, data.get('selected'), data.get('elapsed_ms', 0))
+        _touch(conn, sid)
+        return result
 
 
 def _is_blank(question, selected):
@@ -368,8 +391,8 @@ def finish_session(uid, sid, data):
                         continue
                     _record_answer(conn, session, questions[qid], selected, draft.get('elapsed_ms', 0),
                                    replace=True)
-            conn.execute("UPDATE sessions SET position=?,drafts=?,status='completed' WHERE id=?",
-                         (position, json.dumps(drafts, ensure_ascii=False), sid))
+            conn.execute("UPDATE sessions SET position=?,drafts=?,status='completed',updated_at=? WHERE id=?",
+                         (position, json.dumps(drafts, ensure_ascii=False), now(), sid))
     return get_session(uid, sid)
 
 

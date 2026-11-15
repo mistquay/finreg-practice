@@ -758,6 +758,9 @@ progress::-moz-progress-bar {
   color: #8b6c35;
   margin-top: 2px;
 }
+.session-status.idle {
+  color: #9aa294;
+}
 .session-status.done {
   color: var(--teal);
 }
