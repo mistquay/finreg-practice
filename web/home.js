@@ -78,7 +78,7 @@ export async function renderHome(root, meta) {
     (a, b) => SUBJECTS.indexOf(a) - SUBJECTS.indexOf(b),
   );
   const state = {
-    module: available[0] || "",
+    modules: available.slice(0, 1),
     category: "",
     paperSubject: "计算机专业",
     paperLimit: PAPER_PAGE,
@@ -93,11 +93,11 @@ export async function renderHome(root, meta) {
     `<div class="home-columns">
       <div class="home-main">
         ${continueHTML(active[0], active.length)}
-        <section class="practice-builder" aria-labelledby="module-title"><div class="section-title"><h2 id="module-title">专项练习</h2><span>选择科目与小类，立即开始</span></div><div class="subject-list">${
+        <section class="practice-builder" aria-labelledby="module-title"><div class="section-title"><h2 id="module-title">专项练习</h2><span>科目可多选；只选一科时可再选小类</span></div><div class="subject-list">${
           available
             .map(
               (m) =>
-                `<button class="subject-row" data-module="${esc(m)}"><span class="subject-symbol">${icon(SUBJECT_ICONS[m])}</span><span class="subject-copy"><strong>${esc(m)}</strong><small>${esc(DESCRIPTIONS[m] || "按模块练习，逐步积累")}</small></span><span class="subject-count">${num(modules[m])}<small>道题</small></span><span class="subject-select">${icon("check")}</span></button>`,
+                `<button class="subject-row" data-module="${esc(m)}" role="checkbox"><span class="subject-symbol">${icon(SUBJECT_ICONS[m])}</span><span class="subject-copy"><strong>${esc(m)}</strong><small>${esc(DESCRIPTIONS[m] || "按模块练习，逐步积累")}</small></span><span class="subject-count">${num(modules[m])}<small>道题</small></span><span class="subject-select">${icon("check")}</span></button>`,
             )
             .join("") ||
           '<div class="empty"><h3>先为学习空间添加题目</h3><a class="button primary" href="#data">导入题库</a></div>'
@@ -122,21 +122,25 @@ export async function renderHome(root, meta) {
 
   function selectSubject() {
     $$("[data-module]", root).forEach((b) => {
-      const on = b.dataset.module === state.module;
+      const on = state.modules.includes(b.dataset.module);
       b.classList.toggle("selected", on);
-      b.setAttribute("aria-pressed", on);
+      b.setAttribute("aria-checked", on);
     });
-    const counts = readyBy(
-      meta.facets,
-      "category",
-      (f) => f.module === state.module,
-    );
-    const categories = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
     const picker = $("#category-picker", root);
     if (!picker) return;
+    if (state.modules.length > 1) {
+      // Categories belong to one subject; a mix draws from each whole subject.
+      picker.hidden = true;
+      $("#builder-hint", root).textContent =
+        `${state.modules.join(" + ")} · 共 ${num(state.modules.reduce((n, m) => n + modules[m], 0))} 道 · 各科目平均分配题量，随机混合出题`;
+      return;
+    }
+    const [module] = state.modules;
+    const counts = readyBy(meta.facets, "category", (f) => f.module === module);
+    const categories = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
     // A single-category subject has nothing to choose.
     picker.hidden = categories.length < 2;
-    picker.innerHTML = [["", "全部小类", modules[state.module]]]
+    picker.innerHTML = [["", "全部小类", modules[module]]]
       .concat(categories.map((k) => [k, k, counts[k]]))
       .map(
         ([v, t, n]) =>
@@ -151,12 +155,19 @@ export async function renderHome(root, meta) {
         }),
     );
     $("#builder-hint", root).textContent =
-      `${state.module}${state.category ? ` · ${state.category}` : ""} · 随机组题，自动跳过待核验题目`;
+      `${module}${state.category ? ` · ${state.category}` : ""} · 随机组题，自动跳过待核验题目`;
   }
   $$("[data-module]", root).forEach(
     (b) =>
       (b.onclick = () => {
-        state.module = b.dataset.module;
+        const m = b.dataset.module;
+        if (!state.modules.includes(m))
+          state.modules = available.filter(
+            (x) => x === m || state.modules.includes(x),
+          );
+        else if (state.modules.length > 1)
+          state.modules = state.modules.filter((x) => x !== m);
+        else return toast("至少选择一个科目");
         state.category = "";
         selectSubject();
       }),
@@ -170,13 +181,17 @@ export async function renderHome(root, meta) {
       try {
         await startPractice({
           filters: {
-            module: state.module,
+            module:
+              state.modules.length > 1 ? state.modules : state.modules[0],
             ...(state.category ? { category: state.category } : {}),
             ...($("#quick-unseen", root).checked ? { unseen: "1" } : {}),
           },
           mode: $("#quick-mode", root).value,
           count: Number($("#quick-count", root).value),
-          title: `${state.category || state.module} · 专项练习`,
+          title:
+            state.modules.length > 1
+              ? `${state.modules.join("、")} · 综合练习`
+              : `${state.category || state.modules[0]} · 专项练习`,
         });
       } finally {
         start.disabled = false;

@@ -477,7 +477,7 @@ nav a.active {
   width: 20px;
   height: 20px;
   border: 1px solid #aebda6;
-  border-radius: 50%;
+  border-radius: 5px;
   display: grid;
   place-items: center;
 }

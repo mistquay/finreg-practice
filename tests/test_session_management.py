@@ -44,6 +44,20 @@ class SessionManagementTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             services.create_session({'question_ids': 'pdf-2024-001'})
 
+    def test_mixed_subjects_share_the_count_evenly(self):
+        modules = ['计算机专业', '英语', '经济金融基础']
+        s = services.create_session({'filters': {'module': modules}, 'count': 30})
+        picked = [services.get_question(qid)['module'] for qid in s['question_ids']]
+        self.assertEqual({m: picked.count(m) for m in modules}, {m: 10 for m in modules})
+        self.assertEqual(services.list_questions({'module': modules})['total'],
+                         sum(services.list_questions({'module': m})['total'] for m in modules))
+        with self.assertRaises(ValueError):
+            services.create_session({'filters': {'module': ['英语', 3]}})
+
+    def test_balanced_gives_a_short_pool_share_to_the_others(self):
+        self.assertEqual(services._balanced([[1, 2], list('abcdefgh')], 6), [1, 2, 'a', 'b', 'c', 'd'])
+        self.assertEqual(services._balanced([[1], []], 5), [1])
+
     def test_metadata_reports_paper_progress_and_session_answers(self):
         s = self.practice()
         qid = s['question_ids'][0]

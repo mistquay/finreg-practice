@@ -30,9 +30,17 @@ def where(filters, alias='q'):
     """Translate query-string filters into a SQL condition over the questions table."""
     clauses, values = [], []
     for key in ('module', 'category', 'topic', 'paper_id', 'quality', 'type', 'year'):
-        if filters.get(key):
+        value = filters.get(key)
+        if isinstance(value, list):
+            # JSON bodies may pass several values, e.g. a mixed practice over three subjects.
+            if not all(isinstance(v, str) for v in value):
+                raise ValueError(f'筛选条件 {key} 格式错误')
+            if value:
+                clauses.append(f'{alias}.{key} IN ({",".join("?" for _ in value)})')
+                values.extend(value)
+        elif value:
             clauses.append(f'{alias}.{key}=?')
-            values.append(filters[key])
+            values.append(value)
     for key in ('kind', 'exam_level'):
         if filters.get(key):
             clauses.append(f'EXISTS(SELECT 1 FROM papers p WHERE p.id={alias}.paper_id AND p.{key}=?)')
@@ -137,14 +145,27 @@ def create_session(data):
             filters = dict(data.get('filters') or {}, quality='ready')
             if mode == 'review':
                 filters['wrong'] = '1'
-            clause, args = where(filters)
-            ids = [r['id'] for r in c.execute(
-                f'SELECT id FROM questions q WHERE {clause} ORDER BY year DESC, paper_id, number', args)]
-            # A whole paper in exam mode keeps its original order unless shuffling is asked for.
-            if data.get('shuffle', mode != 'exam' or not filters.get('paper_id')):
-                random.shuffle(ids)
+            limit = None
             if not data.get('full_paper') and (mode != 'exam' or data.get('count') is not None):
-                ids = ids[:min(MAX_SESSION_QUESTIONS, max(1, int(data.get('count', 20))))]
+                limit = min(MAX_SESSION_QUESTIONS, max(1, int(data.get('count', 20))))
+            where(filters)  # validate every filter value before any per-subject query
+            modules = filters.get('module')
+            if limit and isinstance(modules, list) and len(modules) > 1:
+                # Mixed subjects share the count evenly, otherwise a large bank crowds out small ones.
+                pools = []
+                for module in dict.fromkeys(modules):
+                    pool = _matching_ids(c, dict(filters, module=module))
+                    random.shuffle(pool)
+                    pools.append(pool)
+                ids = _balanced(pools, limit)
+                random.shuffle(ids)
+            else:
+                ids = _matching_ids(c, filters)
+                # A whole paper in exam mode keeps its original order unless shuffling is asked for.
+                if data.get('shuffle', mode != 'exam' or not filters.get('paper_id')):
+                    random.shuffle(ids)
+                if limit:
+                    ids = ids[:limit]
         if not ids:
             raise ValueError('当前条件下没有可练习题目；待核验题默认不参与组卷。')
         sid = uuid.uuid4().hex
@@ -152,6 +173,28 @@ def create_session(data):
         c.execute('INSERT INTO sessions(id,created_at,mode,title,question_ids) VALUES(?,?,?,?,?)',
                   (sid, now(), mode, title, json.dumps(ids)))
     return get_session(sid)
+
+
+def _matching_ids(conn, filters):
+    clause, args = where(filters)
+    return [r['id'] for r in conn.execute(
+        f'SELECT id FROM questions q WHERE {clause} ORDER BY year DESC, paper_id, number', args)]
+
+
+def _balanced(pools, count):
+    """Take up to `count` items round-robin; a short pool's unused share goes to the others."""
+    picked = [[] for _ in pools]
+    total = 0
+    while total < count:
+        progressed = False
+        for taken, pool in zip(picked, pools):
+            if total < count and len(taken) < len(pool):
+                taken.append(pool[len(taken)])
+                total += 1
+                progressed = True
+        if not progressed:
+            break
+    return [x for taken in picked for x in taken]
 
 
 def _read_session(conn, sid):
