@@ -30,6 +30,8 @@ function showAccount() {
 async function route() {
   const token = ++routeToken;
   leavePractice();
+  // A route change (e.g. starting practice from the drawer) leaves no stale overlay behind.
+  ["#drawer", "#dialog"].forEach((s) => $(s).open && $(s).close());
   const [path, search = ""] = location.hash.slice(1).split("?");
   let [view = "home", id] = path.split("/");
   const app = $("#app");

@@ -119,6 +119,7 @@ button:disabled,
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  min-height: 0;
   border: 0;
   background: none;
   padding: 0;
@@ -278,6 +279,8 @@ select:disabled {
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 12px;
+  padding: 0;
+  border: 0;
   min-width: 0;
 }
 .card-heading.wrap {
@@ -405,7 +408,12 @@ select:disabled {
 .chip:hover {
   border-color: var(--primary);
 }
-.chip.selected {
+dialog .chip {
+  background: var(--paper-sunk);
+  border-color: var(--line);
+}
+.chip.selected,
+dialog .chip.selected {
   background: var(--ink);
   border-color: var(--ink);
   color: var(--paper);
@@ -514,6 +522,10 @@ table {
   width: 100%;
   border-collapse: collapse;
   font-size: var(--fs-sm);
+}
+thead {
+  background: transparent;
+  color: var(--ink-3);
 }
 thead th {
   padding: 10px 12px;

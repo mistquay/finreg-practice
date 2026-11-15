@@ -51,6 +51,9 @@ CREATE TABLE IF NOT EXISTS imported_documents(sha256 TEXT PRIMARY KEY, created_a
 CREATE TABLE IF NOT EXISTS marks(
     user_id INTEGER REFERENCES users(id), question_id TEXT NOT NULL REFERENCES questions(id),
     favorite INTEGER DEFAULT 0, note TEXT DEFAULT '', PRIMARY KEY(user_id, question_id));
+CREATE TABLE IF NOT EXISTS user_settings(
+    user_id INTEGER PRIMARY KEY REFERENCES users(id), exam_name TEXT NOT NULL DEFAULT '',
+    exam_date TEXT NOT NULL DEFAULT '', daily_goal INTEGER NOT NULL DEFAULT 50, focus TEXT NOT NULL DEFAULT '[]');
 '''
 
 # Study records belong to a user. Rows from before accounts existed keep user_id NULL until the

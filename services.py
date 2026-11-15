@@ -102,6 +102,16 @@ def get_question(qid, with_answer=False, include_raw=True, uid=None):
     return decode(row)
 
 
+def _wrong_by_module(c, uid):
+    """Questions whose latest counted attempt was wrong, per module: the user's open wrong list."""
+    return dict(c.execute(f'''SELECT q.module, count(*) FROM attempts a JOIN sessions s ON s.id=a.session_id
+        JOIN questions q ON q.id=a.question_id
+        WHERE a.user_id=? AND {COUNTED} AND a.correct=0 AND a.id=(
+            SELECT max(b.id) FROM attempts b JOIN sessions s ON s.id=b.session_id
+            WHERE b.question_id=a.question_id AND b.user_id=a.user_id AND {COUNTED})
+        GROUP BY q.module''', (uid,)).fetchall())
+
+
 def metadata(uid):
     """Everything the non-practice screens need in one request: papers, facets, counts, recent sessions."""
     with connect() as c:
@@ -118,18 +128,16 @@ def metadata(uid):
             facet.pop('review')
         counts['favorites'] = c.execute('SELECT count(*) FROM marks WHERE user_id=? AND favorite=1',
                                         (uid,)).fetchone()[0]
-        counts['wrong'] = c.execute(f'''SELECT count(*) FROM attempts a JOIN sessions s ON s.id=a.session_id
-            WHERE a.user_id=? AND {COUNTED} AND a.correct=0 AND a.id=(
-                SELECT max(b.id) FROM attempts b JOIN sessions s ON s.id=b.session_id
-                WHERE b.question_id=a.question_id AND b.user_id=a.user_id AND {COUNTED})''',
-                                    (uid,)).fetchone()[0]
+        counts['wrong_modules'] = _wrong_by_module(c, uid)
+        counts['wrong'] = sum(counts['wrong_modules'].values())
         counts['seen'] = c.execute(f'''SELECT count(DISTINCT a.question_id) FROM attempts a
             JOIN sessions s ON s.id=a.session_id WHERE a.user_id=? AND {COUNTED}''', (uid,)).fetchone()[0]
-        done = dict(c.execute(f'''SELECT q.paper_id, count(DISTINCT a.question_id) FROM attempts a
+        done = {r[0]: r for r in c.execute(f'''SELECT q.paper_id, count(DISTINCT a.question_id),
+            coalesce(sum(a.correct IS NOT NULL),0), coalesce(sum(a.correct=1),0) FROM attempts a
             JOIN sessions s ON s.id=a.session_id JOIN questions q ON q.id=a.question_id
-            WHERE a.user_id=? AND {COUNTED} GROUP BY q.paper_id''', (uid,)).fetchall())
+            WHERE a.user_id=? AND {COUNTED} GROUP BY q.paper_id''', (uid,))}
         for paper in papers:
-            paper['done'] = done.get(paper['id'], 0)
+            _, paper['done'], paper['graded'], paper['correct'] = done.get(paper['id'], (None, 0, 0, 0))
         sessions = [_session_summary(r) for r in c.execute('''SELECT id, title, mode, created_at, updated_at,
             status, position, drafts, json_array_length(question_ids) total,
             (SELECT count(*) FROM attempts a WHERE a.session_id=sessions.id) answered,
@@ -436,18 +444,17 @@ def aggregate(rows):
             'unique': len({r['question_id'] for r in rows})}
 
 
-def statistics(uid, filters):
-    """Summary, today, daily trend and grouped breakdown, all by Beijing calendar day."""
+
+def _attempt_rows(uid, filters, first_day, last_day):
+    """Counted attempts matching the question filters between two Beijing days (first_day None = all time)."""
     clause, args = where(filters, uid)
-    today = datetime.now(TZ).date()
-    days = max(0, min(3650, int(filters.get('days', 7))))
     extra = ['a.user_id=?']
     args.append(uid)
-    if days:
+    if first_day:
         extra.append('substr(a.created_at,1,10)>=?')
-        args.append((today - timedelta(days=days - 1)).isoformat())
+        args.append(first_day.isoformat())
     extra.append('substr(a.created_at,1,10)<=?')
-    args.append(today.isoformat())
+    args.append(last_day.isoformat())
     extra.append(f'EXISTS(SELECT 1 FROM sessions s WHERE s.id=a.session_id AND {COUNTED})')
     if filters.get('attempt') == 'first':
         extra.append('a.is_first=1')
@@ -455,9 +462,23 @@ def statistics(uid, filters):
         extra.append('a.mode=?')
         args.append(filters['mode'])
     with connect() as c:
-        rows = [dict(r) for r in c.execute(f'''SELECT a.*, q.module, q.category, q.topic, q.tags, q.paper_id
+        return [dict(r) for r in c.execute(f'''SELECT a.*, q.module, q.category, q.topic, q.tags, q.paper_id
             FROM attempts a JOIN questions q ON q.id=a.question_id
             WHERE {clause} AND {" AND ".join(extra)}''', args)]
+
+
+HEATMAP_WEEKS = 26
+
+
+def statistics(uid, filters):
+    """Summary, today, daily trend and grouped breakdown, all by Beijing calendar day.
+
+    `compare=1` adds the previous period of equal length; `heatmap=1` adds daily counts for the last
+    26 weeks (Monday-aligned), both under the same question filters."""
+    today = datetime.now(TZ).date()
+    days = max(0, min(3650, int(filters.get('days', 7))))
+    first = today - timedelta(days=days - 1) if days else None
+    rows = _attempt_rows(uid, filters, first, today)
     group = filters.get('group', 'module')
     if group not in ('module', 'category', 'topic', 'tag'):
         group = 'module'
@@ -466,16 +487,158 @@ def statistics(uid, filters):
         daily[r['created_at'][:10]].append(r)
         for key in (json.loads(r['tags']) if group == 'tag' else [r[group]]):
             groups[key].append(r)
-    if days:
-        start = today - timedelta(days=days - 1)
-    else:
-        start = datetime.fromisoformat(min(daily) if daily else today.isoformat()).date()
+    start = first or datetime.fromisoformat(min(daily) if daily else today.isoformat()).date()
     trend = []
     date = start
     while date <= today:
         key = date.isoformat()
         trend.append(dict(date=key, **aggregate(daily[key])))
         date += timedelta(days=1)
-    return {'summary': aggregate(rows), 'today': aggregate(daily[today.isoformat()]), 'trend': trend,
-            'groups': [dict(name=k, last=max(x['created_at'] for x in v), **aggregate(v)) for k, v in groups.items()],
-            'timezone': 'Asia/Shanghai', 'group': group}
+    result = {'summary': aggregate(rows), 'today': aggregate(daily[today.isoformat()]), 'trend': trend,
+              'groups': [dict(name=k, last=max(x['created_at'] for x in v), **aggregate(v))
+                         for k, v in groups.items()],
+              'timezone': 'Asia/Shanghai', 'group': group}
+    if filters.get('compare') == '1' and first:
+        result['previous'] = aggregate(_attempt_rows(uid, filters, first - timedelta(days=days),
+                                                     first - timedelta(days=1)))
+    if filters.get('heatmap') == '1':
+        heat_start = today - timedelta(days=today.weekday(), weeks=HEATMAP_WEEKS - 1)
+        source = rows if first and first <= heat_start else _attempt_rows(uid, filters, heat_start, today)
+        counts = defaultdict(int)
+        for r in source:
+            counts[r['created_at'][:10]] += 1
+        result['heatmap'] = [{'date': (heat_start + timedelta(days=i)).isoformat(),
+                              'count': counts[(heat_start + timedelta(days=i)).isoformat()]}
+                             for i in range((today - heat_start).days + 1)]
+    return result
+
+
+# ---------------------------------------------------------------- settings and dashboard
+
+DEFAULT_GOAL = 50
+
+
+def get_settings(uid):
+    with connect() as c:
+        row = c.execute('SELECT exam_name, exam_date, daily_goal, focus FROM user_settings WHERE user_id=?',
+                        (uid,)).fetchone()
+    if not row:
+        return {'exam_name': '', 'exam_date': '', 'daily_goal': DEFAULT_GOAL, 'focus': []}
+    return {'exam_name': row['exam_name'], 'exam_date': row['exam_date'], 'daily_goal': row['daily_goal'],
+            'focus': json.loads(row['focus'] or '[]')}
+
+
+def save_settings(uid, data):
+    """Update any of exam name/date, daily goal and focus subjects; omitted fields keep their value."""
+    if not isinstance(data, dict):
+        raise ValueError('设置格式错误')
+    s = get_settings(uid)
+    if 'exam_name' in data:
+        name = str(data['exam_name'] or '').strip()
+        if len(name) > 30:
+            raise ValueError('考试名称最多 30 个字')
+        s['exam_name'] = name
+    if 'exam_date' in data:
+        value = str(data['exam_date'] or '').strip()
+        if value:
+            try:
+                datetime.strptime(value, '%Y-%m-%d')
+            except ValueError:
+                raise ValueError('考试日期格式应为 年-月-日，例如 2027-01-10') from None
+        s['exam_date'] = value
+    if 'daily_goal' in data:
+        try:
+            goal = int(data['daily_goal'])
+        except (TypeError, ValueError):
+            raise ValueError('每日目标需要填写整数') from None
+        if not 5 <= goal <= 500:
+            raise ValueError('每日目标应在 5 到 500 题之间')
+        s['daily_goal'] = goal
+    if 'focus' in data:
+        focus = data['focus']
+        if (not isinstance(focus, list) or len(focus) > 10
+                or not all(isinstance(x, str) and 0 < len(x) <= 30 for x in focus)):
+            raise ValueError('主攻科目格式错误')
+        s['focus'] = list(dict.fromkeys(focus))
+    with connect() as c:
+        c.execute('''INSERT INTO user_settings(user_id, exam_name, exam_date, daily_goal, focus) VALUES(?,?,?,?,?)
+            ON CONFLICT(user_id) DO UPDATE SET exam_name=excluded.exam_name, exam_date=excluded.exam_date,
+            daily_goal=excluded.daily_goal, focus=excluded.focus''',
+                  (uid, s['exam_name'], s['exam_date'], s['daily_goal'], json.dumps(s['focus'], ensure_ascii=False)))
+    return s
+
+
+DASHBOARD_DAYS = 14
+REVIEW_TASK = 10
+WEAK_TASK = 10
+WEAK_MIN_GRADED = 20
+WEAK_BELOW = 85
+
+
+def dashboard(uid):
+    """The study-center summary: today vs yesterday, a 14-day series, streak, this week, per-subject
+    mastery, open wrong questions and today's checklist. Same counting rules as statistics()."""
+    today = datetime.now(TZ).date()
+    settings = get_settings(uid)
+    with connect() as c:
+        by_day = {r['d']: dict(r) for r in c.execute(f'''SELECT substr(a.created_at,1,10) d, count(*) count,
+            coalesce(sum(a.correct IS NOT NULL),0) graded, coalesce(sum(a.correct=1),0) correct,
+            coalesce(sum(a.elapsed_ms),0) elapsed_ms, coalesce(sum(a.mode='review'),0) review
+            FROM attempts a JOIN sessions s ON s.id=a.session_id
+            WHERE a.user_id=? AND {COUNTED} AND substr(a.created_at,1,10)>=? GROUP BY d''',
+                                                          (uid, (today - timedelta(days=400)).isoformat()))}
+        mastery = {r['name']: dict(r) for r in c.execute(f'''SELECT q.module name,
+            count(DISTINCT a.question_id) seen, coalesce(sum(a.correct IS NOT NULL),0) graded,
+            coalesce(sum(a.correct=1),0) correct
+            FROM attempts a JOIN sessions s ON s.id=a.session_id JOIN questions q ON q.id=a.question_id
+            WHERE a.user_id=? AND {COUNTED} GROUP BY q.module''', (uid,))}
+        ready = dict(c.execute("SELECT module, count(*) FROM questions WHERE quality='ready' GROUP BY module")
+                     .fetchall())
+        today_modules = dict(c.execute(f'''SELECT q.module, count(*) FROM attempts a
+            JOIN sessions s ON s.id=a.session_id JOIN questions q ON q.id=a.question_id
+            WHERE a.user_id=? AND {COUNTED} AND substr(a.created_at,1,10)=? GROUP BY q.module''',
+                                       (uid, today.isoformat())).fetchall())
+        wrong = _wrong_by_module(c, uid)
+
+    def day(d):
+        r = by_day.get(d.isoformat(), {})
+        graded = r.get('graded', 0)
+        return {'date': d.isoformat(), 'count': r.get('count', 0), 'graded': graded,
+                'correct': r.get('correct', 0),
+                'accuracy': round(r['correct'] / graded * 100, 1) if graded else None,
+                'elapsed_ms': r.get('elapsed_ms', 0), 'review': r.get('review', 0)}
+
+    recent = [day(today - timedelta(days=i)) for i in range(DASHBOARD_DAYS - 1, -1, -1)]
+    streak = 0
+    cursor = today if today.isoformat() in by_day else today - timedelta(days=1)
+    while cursor.isoformat() in by_day:
+        streak += 1
+        cursor -= timedelta(days=1)
+    monday = today - timedelta(days=today.weekday())
+    week = [{'date': (monday + timedelta(days=i)).isoformat(),
+             'count': by_day.get((monday + timedelta(days=i)).isoformat(), {}).get('count', 0)}
+            for i in range(7)]
+    subjects = []
+    for name in sorted(set(ready) | set(mastery), key=lambda m: -ready.get(m, 0)):
+        m = mastery.get(name, {'seen': 0, 'graded': 0, 'correct': 0})
+        subjects.append({'name': name, 'ready': ready.get(name, 0), 'seen': m['seen'], 'graded': m['graded'],
+                         'accuracy': round(m['correct'] / m['graded'] * 100, 1) if m['graded'] else None,
+                         'wrong': wrong.get(name, 0)})
+    candidates = [s for s in subjects if s['graded'] >= WEAK_MIN_GRADED and s['accuracy'] < WEAK_BELOW]
+    weakest = min(candidates, key=lambda s: s['accuracy'])['name'] if candidates else None
+
+    goal = settings['daily_goal']
+    tasks = [{'key': 'goal', 'label': f'完成 {goal} 题', 'done': min(recent[-1]['count'], goal), 'total': goal}]
+    review_total = min(REVIEW_TASK, sum(wrong.values()) + recent[-1]['review'])
+    if review_total:
+        tasks.append({'key': 'review', 'label': f'复习 {review_total} 道错题',
+                      'done': min(recent[-1]['review'], review_total), 'total': review_total})
+    if weakest:
+        tasks.append({'key': 'weak', 'label': f'薄弱科目「{weakest}」练 {WEAK_TASK} 题', 'module': weakest,
+                      'done': min(today_modules.get(weakest, 0), WEAK_TASK), 'total': WEAK_TASK})
+    countdown = None
+    if settings['exam_date']:
+        countdown = (datetime.strptime(settings['exam_date'], '%Y-%m-%d').date() - today).days
+    return {'today': recent[-1], 'yesterday': recent[-2], 'recent': recent, 'streak': streak, 'week': week,
+            'subjects': subjects, 'weakest': weakest, 'wrong_modules': wrong, 'tasks': tasks,
+            'settings': settings, 'countdown': countdown, 'date': today.isoformat()}

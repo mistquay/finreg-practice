@@ -3,312 +3,260 @@ import {
   $$,
   esc,
   api,
-  heading,
   startPractice,
   handle,
   duration,
   pct,
-  query,
   num,
   modal,
   toast,
   isAdmin,
+  account,
   paperSubject as getPaperSubject,
 } from "./ui.js";
 import { icon } from "./icons.js";
+import { sparkBars, sparkLine, gauge } from "./charts.js";
+import { openBuilder, subjectOrder } from "./builder.js";
+import { openSettings } from "./auth.js";
 
-const SUBJECTS = ["计算机专业", "经济金融基础", "英语", "行测", "申论"];
-const SUBJECT_ICONS = {
-  计算机专业: "monitor",
-  经济金融基础: "chart",
-  英语: "globe",
-  行测: "book",
-  申论: "pen",
-};
-const DESCRIPTIONS = {
-  计算机专业: "沿着知识点，打牢专业基础",
-  经济金融基础: "理解概念，也掌握应用",
-  英语: "在真题中积累阅读经验",
-  行测: "练习解题方法与作答速度",
-  申论: "阅读材料，组织有依据的表达",
-};
 const PAPER_TABS = [
   ["计算机专业", "专业科目"],
   ["行测", "行测"],
   ["申论", "申论"],
 ];
-// Mock exams and daily essay drills are reachable from the library; the home page lists real papers.
+// Mock exams and daily essay drills live in the library; the home page lists real papers.
 const NOT_REAL_PAPER = ["国考模拟题", "申论小模考"];
-const PAPER_PAGE = 5;
+const GAUGE_COLORS = ["var(--primary)", "var(--amber)", "var(--violet)"];
+const WEEKDAYS = ["一", "二", "三", "四", "五", "六", "日"];
 
-function readyBy(facets, key, filter = () => true) {
-  const counts = {};
-  facets.filter(filter).forEach((f) => {
-    counts[f[key]] = (counts[f[key]] || 0) + f.ready;
-  });
-  return counts;
+const accuracyOf = (s) => (s.graded ? Math.round((s.correct / s.graded) * 1000) / 10 : null);
+const minutes = (ms) => {
+  const m = Math.round(ms / 60000);
+  return m < 60 ? [String(m), "分钟"] : [`${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`, "时:分"];
+};
+
+function greeting() {
+  const h = Number(
+    new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", hour: "numeric", hour12: false }).format(
+      new Date(),
+    ),
+  );
+  return h < 5 ? "夜深了" : h < 11 ? "早上好" : h < 13 ? "中午好" : h < 18 ? "下午好" : "晚上好";
 }
 
-const accuracy = (s) =>
-  s.graded ? pct(Math.round((s.correct / s.graded) * 1000) / 10) : null;
+function delta(now, before, unit = "", digits = 0) {
+  if (before == null || now == null) return '<span class="delta flat">—</span>';
+  const diff = Math.round((now - before) * 10 ** digits) / 10 ** digits;
+  if (!diff) return '<span class="delta flat">持平</span>';
+  return `<span class="delta ${diff > 0 ? "up" : "down"}">${diff > 0 ? "↑" : "↓"} ${Math.abs(diff)}${unit}</span>`;
+}
 
-// The top panel: an unfinished session with real progress, else the round just finished, else a prompt.
-function continueHTML(resume, finished, othersCount) {
-  const others = othersCount
-    ? `<small class="continue-more">另有 ${othersCount} 个未完成练习，见右侧“最近练习”。</small>`
-    : "";
+function resumeCard(resume, finished, othersCount) {
   if (resume) {
-    const progress =
-      resume.mode === "exam"
-        ? `考试模式 · 已填写 ${resume.filled} / ${resume.total} 题，交卷后统一判分`
-        : `已答 ${resume.answered} / ${resume.total} 题 · 上次看到第 ${resume.position + 1} 题`;
-    return `<section class="continue-panel" aria-labelledby="continue-title"><div class="continue-copy"><span class="status-label">${icon("bookmark")}上次的练习还没做完</span><h2 id="continue-title">${esc(resume.title)}</h2><p>${progress}</p><div class="toolbar"><a class="button primary" href="#practice/${resume.id}">继续上次练习${icon("arrow")}</a><button class="quiet" data-discard="${resume.id}">放弃这次练习</button></div>${others}</div>${noteArt()}</section>`;
+    const exam = resume.mode === "exam";
+    const done = exam ? resume.filled : resume.answered;
+    const wrong = resume.graded - resume.correct;
+    return `<article class="card dash-resume span-6" aria-labelledby="resume-title"><div class="card-heading"><h2>上次的练习</h2><span>${resume.updated_at.slice(5, 16).replace("T", " ")}</span></div>
+      <h3 id="resume-title" class="resume-title">${esc(resume.title)}</h3>
+      <p class="resume-meta">${exam ? "考试模式 · 交卷后统一判分" : "练习模式 · 单选即判，多选确认后判分"}${othersCount ? ` · 另有 ${othersCount} 个未完成` : ""}</p>
+      <div class="resume-progress"><span class="meter"><i style="width:${(done / resume.total) * 100}%"></i></span><b class="num">${done} / ${resume.total}</b></div>
+      <div class="resume-foot"><dl class="mini-stats">${
+        exam
+          ? `<div><dt>已填写</dt><dd class="num">${resume.filled}</dd></div><div><dt>未作答</dt><dd class="num">${resume.total - resume.filled}</dd></div>`
+          : `<div><dt>答对</dt><dd class="num">${resume.correct}</dd></div><div><dt>答错</dt><dd class="num">${wrong}</dd></div><div><dt>正确率</dt><dd class="num">${pct(accuracyOf(resume))}</dd></div>`
+      }</dl><div class="toolbar"><button class="quiet" data-discard="${resume.id}">放弃</button><a class="primary ink" href="#practice/${resume.id}">从第 ${resume.position + 1} 题继续${icon("arrow")}</a></div></div></article>`;
   }
   if (finished) {
     const wrong = finished.graded - finished.correct;
-    const result = finished.graded
-      ? `答对 ${finished.correct} / ${finished.graded} 题 · 正确率 ${accuracy(finished)}${wrong ? ` · ${wrong} 道错题已收进错题本` : ""}`
-      : `已完成 ${finished.answered} 题`;
-    return `<section class="continue-panel" aria-labelledby="continue-title"><div class="continue-copy"><span class="status-label">${icon("check")}上一轮已完成</span><h2 id="continue-title">${esc(finished.title)}</h2><p>${result}</p><div class="toolbar"><button class="primary" id="next-round">开始下一组${icon("arrow")}</button><a class="button secondary" href="#practice/${finished.id}">查看复盘</a></div></div>${noteArt()}</section>`;
+    return `<article class="card dash-resume span-6" aria-labelledby="resume-title"><div class="card-heading"><h2>上一轮已完成</h2><span>${finished.updated_at.slice(5, 16).replace("T", " ")}</span></div>
+      <h3 id="resume-title" class="resume-title">${esc(finished.title)}</h3>
+      <p class="resume-meta">${finished.graded ? `答对 ${finished.correct} / ${finished.graded} 题${wrong ? ` · ${wrong} 道错题已收进错题本` : ""}` : `已完成 ${finished.answered} 题`}</p>
+      <div class="resume-progress"><span class="meter good"><i style="width:100%"></i></span><b class="num">${pct(accuracyOf(finished))}</b></div>
+      <div class="resume-foot"><span></span><div class="toolbar"><a class="ghost" href="#practice/${finished.id}">查看复盘</a><button class="primary ink" data-open-builder>开始下一组${icon("arrow")}</button></div></div></article>`;
   }
-  return `<section class="continue-panel" aria-labelledby="continue-title"><div class="continue-copy"><span class="status-label">${icon("book")}为今天留一点学习时间</span><h2 id="continue-title">选一个专项，开始进入状态。</h2><p>专业课、行测与申论，按你的节奏练习。</p><a class="button primary" href="#library">浏览题库${icon("arrow")}</a></div>${noteArt()}</section>`;
+  return `<article class="card dash-resume span-6" aria-labelledby="resume-title"><div class="card-heading"><h2>开始今天的练习</h2></div>
+    <h3 id="resume-title" class="resume-title">选一个专项，进入状态</h3>
+    <p class="resume-meta">专业课、行测与申论，按科目和小类组题，练习记录自动保存。</p>
+    <div class="resume-foot"><span></span><div class="toolbar"><a class="ghost" href="#library">浏览题库</a><button class="primary ink" data-open-builder>${icon("plus")}自选专项</button></div></div></article>`;
 }
 
-function noteArt() {
-  return '<div class="continue-note" aria-hidden="true"><span>知 序</span><div class="book-lines"><i></i><i></i><i></i><i></i></div><small>日有所学</small></div>';
+function weekCard(dash) {
+  const days = dash.week
+    .map((d, i) => {
+      const future = d.date > dash.date;
+      const cls = d.date === dash.date ? "today" : d.count ? "done" : future ? "future" : "";
+      return `<li class="${cls}"><span>${WEEKDAYS[i]}</span><b class="num" title="${d.date}：${d.count} 题">${Number(d.date.slice(8))}</b></li>`;
+    })
+    .join("");
+  const practiced = dash.week.filter((d) => d.count).length;
+  return `<article class="card dash-week span-3"><div class="card-heading"><h2>本周打卡</h2><span>${Number(dash.date.slice(5, 7))} 月</span></div><ol class="week-strip">${days}</ol><p class="streak">${icon("flame")}<b class="num">${dash.streak}</b> 天连续 · 本周练了 ${practiced} 天</p></article>`;
 }
 
-function sessionHTML(s) {
-  const done = s.status === "completed";
-  const [symbol, tone, action] = done
-    ? ["check", "done", "查看复盘"]
-    : s.started
-      ? ["clock", "", "继续练习"]
-      : ["book", "idle", "未开始 · 点击开始"];
-  const detail = done
-    ? s.graded
-      ? ` · 正确率 ${accuracy(s)}`
-      : ` · 已答 ${s.answered}`
-    : s.started
-      ? s.mode === "exam"
-        ? ` · 已填 ${s.filled}`
-        : ` · 已答 ${s.answered}`
-      : "";
-  return `<div class="session-item"><a href="#practice/${s.id}"><span class="session-status ${tone}">${icon(symbol)}</span><div><strong>${esc(s.title)}</strong><small>${s.updated_at.slice(5, 16).replace("T", " ")} · ${s.total} 题${detail}</small><span>${action}</span></div>${icon("arrow")}</a>${done ? "" : `<button class="quiet discard" data-discard="${s.id}" aria-label="放弃：${esc(s.title)}">放弃</button>`}</div>`;
+function masteryCard(dash) {
+  const focus = dash.settings.focus.filter((m) => dash.subjects.some((s) => s.name === m));
+  const byActivity = [...dash.subjects].sort((a, b) => b.graded - a.graded);
+  const names = (focus.length ? focus : byActivity.filter((s) => s.graded).map((s) => s.name))
+    .concat(subjectOrder(dash.subjects.map((s) => s.name)))
+    .filter((m, i, a) => a.indexOf(m) === i)
+    .slice(0, 3);
+  const picked = names.map((n) => dash.subjects.find((s) => s.name === n));
+  const graded = picked.reduce((n, s) => n + s.graded, 0);
+  const correct = picked.reduce((n, s) => n + (s.accuracy == null ? 0 : (s.accuracy / 100) * s.graded), 0);
+  const overall = graded ? `${Math.round((correct / graded) * 100)}%` : "—";
+  return `<article class="card dash-mastery span-3"><div class="card-heading"><h2>科目掌握</h2><button class="text-link" id="edit-focus">${focus.length ? "主攻科目" : "设主攻"}</button></div>${gauge(
+    picked.map((s, i) => ({ value: (s.accuracy || 0) / 100, color: GAUGE_COLORS[i] })),
+    overall,
+    "累计正确率",
+  )}<ul class="subject-legend">${picked
+    .map((s, i) => {
+      const tone =
+        s.accuracy == null ? ["muted", "未开始"] : s.name === dash.weakest ? ["warn", `${s.accuracy}% 薄弱`] : s.accuracy >= 80 ? ["good", `${s.accuracy}%`] : ["info", `${s.accuracy}%`];
+      return `<li><i style="background:${GAUGE_COLORS[i]}"></i><span>${esc(s.name)}</span><span class="pill ${tone[0]}">${tone[1]}</span></li>`;
+    })
+    .join("")}</ul></article>`;
+}
+
+function kpiCards(dash, wrongTotal, wrongModules) {
+  const t = dash.today,
+    y = dash.yesterday,
+    r = dash.recent;
+  const [tv, tu] = minutes(t.elapsed_ms);
+  const [yv] = minutes(y.elapsed_ms);
+  const wrongPills = Object.entries(wrongModules)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([m, n]) => `<a class="pill warn" href="#review?module=${encodeURIComponent(m)}">${esc(m)} ${n}</a>`)
+    .join("");
+  return `<article class="card kpi span-3"><div class="card-heading"><h2>今日作答</h2><span>近 14 天</span></div><div class="kpi-value"><b class="num">${num(t.count)}</b><small>题</small>${delta(t.count, y.count)}</div><p class="kpi-note">昨天 ${num(y.count)} 题 · 目标 ${dash.settings.daily_goal} 题</p>${sparkBars(r.map((d) => d.count), "var(--primary)", "近 14 天每日作答题数")}</article>
+  <article class="card kpi span-3"><div class="card-heading"><h2>正确率</h2><span>近 14 天</span></div><div class="kpi-value"><b class="num">${t.accuracy == null ? "—" : t.accuracy}</b><small>${t.accuracy == null ? "今天还没判分" : "%"}</small>${delta(t.accuracy, y.accuracy, "%", 1)}</div><p class="kpi-note">昨天 ${pct(y.accuracy)} · 不含申论</p>${sparkLine(r.map((d) => d.accuracy), "var(--violet)", "近 14 天每日正确率")}</article>
+  <article class="card kpi span-3"><div class="card-heading"><h2>有效用时</h2><span>近 14 天</span></div><div class="kpi-value"><b class="num">${tv}</b><small>${tu}</small>${delta(Math.round(t.elapsed_ms / 60000), Math.round(y.elapsed_ms / 60000), " 分")}</div><p class="kpi-note">昨天 ${yv === "0" ? "未练习" : duration(y.elapsed_ms)} · 暂停不计时</p>${sparkBars(r.map((d) => Math.round(d.elapsed_ms / 60000)), "var(--amber)", "近 14 天每日有效用时（分钟）")}</article>
+  <article class="card kpi span-3"><div class="card-heading"><h2>待复习错题</h2><a class="text-link" href="#review">错题本${icon("arrow")}</a></div><div class="kpi-value"><b class="num">${num(wrongTotal)}</b><small>道</small>${t.review ? `<span class="delta up">今天复习 ${t.review}</span>` : ""}</div><p class="kpi-note">按每道题最近一次作答判断</p><div class="kpi-pills">${wrongPills || '<span class="caption">暂时没有错题</span>'}</div>${wrongTotal ? `<button class="ghost wide" id="start-review">${icon("redo")}错题重练 ${Math.min(20, wrongTotal)} 题</button>` : ""}</article>`;
+}
+
+function tasksCard(dash) {
+  const done = dash.tasks.filter((t) => t.done >= t.total).length;
+  return `<article class="card dash-tasks span-4"><div class="card-heading"><h2>今日清单</h2><span>${done} / ${dash.tasks.length} 完成</span></div><span class="meter amber thin"><i style="width:${(done / dash.tasks.length) * 100}%"></i></span><ul class="task-list">${dash.tasks
+    .map((t) => {
+      const ok = t.done >= t.total;
+      return `<li class="${ok ? "ok" : ""}"><button data-task="${t.key}" ${t.module ? `data-task-module="${esc(t.module)}"` : ""}><span class="task-check">${ok ? icon("check") : ""}</span><span class="task-label">${esc(t.label)}</span><span class="task-count num">${t.done} / ${t.total}</span></button></li>`;
+    })
+    .join("")}</ul>${dash.settings.daily_goal === 50 && !dash.settings.exam_date ? '<button class="text-link" data-open-settings>设置每日目标和考试日期</button>' : ""}</article>`;
+}
+
+function sessionsCard(sessions) {
+  const items = sessions.slice(0, 4).map((s, i) => {
+    const done = s.status === "completed";
+    const status = done
+      ? `<span class="pill good">${s.graded ? `已完成 · ${pct(accuracyOf(s))}` : "已完成"}</span>`
+      : s.started
+        ? '<span class="pill warn">进行中</span>'
+        : '<span class="pill muted">未开始</span>';
+    const detail = done
+      ? `${s.total} 题`
+      : s.mode === "exam"
+        ? `已填 ${s.filled} / ${s.total}`
+        : `已答 ${s.answered} / ${s.total}`;
+    return `<li class="${!done && s.started && i === 0 ? "hot" : ""}"><a href="#practice/${s.id}"><span class="session-title">${esc(s.title)}</span><span class="session-meta">${status}<small>${detail} · ${s.updated_at.slice(5, 16).replace("T", " ")}</small></span></a>${done ? "" : `<button class="quiet" data-discard="${s.id}" aria-label="放弃：${esc(s.title)}">${icon("close")}</button>`}</li>`;
+  });
+  return `<article class="card dash-sessions span-3"><div class="card-heading"><h2>最近练习</h2><span>${sessions.length ? `${Math.min(4, sessions.length)} 条` : ""}</span></div>${
+    items.length
+      ? `<ul class="session-list">${items.join("")}</ul>`
+      : '<p class="empty-line">还没有练习记录。完成第一组练习后，可以随时回来继续。</p>'
+  }</article>`;
 }
 
 export async function renderHome(root, meta) {
-  const stats = await api("/api/stats?days=7");
+  const dash = await api("/api/dashboard");
+  if (!root.isConnected) return;
   const c = meta.counts;
-  const modules = readyBy(meta.facets, "module");
-  const available = Object.keys(modules).sort(
-    (a, b) => SUBJECTS.indexOf(a) - SUBJECTS.indexOf(b),
-  );
-  const state = {
-    modules: available.slice(0, 1),
-    category: "",
-    paperSubject: "计算机专业",
-    paperLimit: PAPER_PAGE,
-  };
-  // Sessions arrive most recently active first; untouched ones are listed but never promoted.
-  const inProgress = meta.sessions.filter(
-    (s) => s.status === "active" && s.started,
-  );
+  const mastery = Object.fromEntries(dash.subjects.map((s) => [s.name, s.accuracy]));
+  const state = { paperSubject: "计算机专业" };
+  const inProgress = meta.sessions.filter((s) => s.status === "active" && s.started);
   const latest = meta.sessions[0];
-  const finished =
-    !inProgress.length && latest?.status === "completed" ? latest : null;
-  root.innerHTML =
-    heading(
-      "今天，从一道题开始。",
-      "专注练习，认真复盘。把每一步积累留在这里。",
-      `<a class="button secondary" href="#stats">${icon("chart")}查看学习统计</a>`,
-    ) +
-    `<div class="home-columns">
-      <div class="home-main">
-        ${continueHTML(inProgress[0], finished, inProgress.length - 1)}
-        <section class="practice-builder" aria-labelledby="module-title"><div class="section-title"><h2 id="module-title">专项练习</h2><span>科目可多选；只选一科时可再选小类</span></div><div class="subject-list">${
-          available
-            .map(
-              (m) =>
-                `<button class="subject-row" data-module="${esc(m)}" role="checkbox"><span class="subject-symbol">${icon(SUBJECT_ICONS[m])}</span><span class="subject-copy"><strong>${esc(m)}</strong><small>${esc(DESCRIPTIONS[m] || "按模块练习，逐步积累")}</small></span><span class="subject-count">${num(modules[m])}<small>道题</small></span><span class="subject-select">${icon("check")}</span></button>`,
-            )
-            .join("") ||
-          (isAdmin()
-            ? '<div class="empty"><h3>先为学习空间添加题目</h3><a class="button primary" href="#data">导入题库</a></div>'
-            : '<div class="empty"><h3>题库还没有题目</h3><p>请联系管理员导入题库。</p></div>')
-        }</div>${
-          available.length
-            ? `<div class="category-picker" id="category-picker" role="group" aria-label="知识小类"></div><div class="builder-actions"><label class="inline-field">模式<select id="quick-mode"><option value="practice">练习模式</option><option value="exam">考试模式</option></select></label><label class="inline-field">每组题量<select id="quick-count"><option>10</option><option selected>20</option><option>30</option><option>50</option></select></label><label class="check-field"><input id="quick-unseen" type="checkbox">只练未做题</label><button class="primary" id="quick-start">开始练习 ${icon("arrow")}</button></div><p class="builder-hint" id="builder-hint"></p>`
-            : ""
-        }</section>
-        <section aria-labelledby="papers-title"><div class="section-title"><h2 id="papers-title">真题练习</h2><a class="text-link" href="#library">全部题库 ${icon("arrow")}</a></div><div class="paper-tabs segmented" role="group" aria-label="真题科目">${PAPER_TABS.map(
-          ([v, t]) => `<button data-paper-subject="${v}">${t}</button>`,
-        ).join("")}</div><div class="paper-list" id="home-papers"></div></section>
-      </div>
-      <aside class="home-aside"><section class="today-panel"><div class="section-title"><h2>今日学习</h2><span>北京时间</span></div><div class="today-count"><strong>${num(stats.today.count)}</strong><span>次作答</span></div><dl class="today-details"><div><dt>正确率</dt><dd>${pct(stats.today.accuracy)}</dd></div><div><dt>有效用时</dt><dd>${duration(stats.today.elapsed_ms)}</dd></div><div><dt>近 7 天作答</dt><dd>${num(stats.summary.count)} 次</dd></div></dl><div class="coverage"><span>题目覆盖</span><strong>${num(c.seen)} <small>/ ${num(c.total)}</small></strong><progress max="${c.total || 1}" value="${c.seen || 0}" aria-label="已作答题目覆盖"></progress><small>按卷内题次统计，同一源题可能出现在多套试卷。</small></div></section>
-        <section class="review-links" aria-label="复习入口"><a href="#review">${icon("bookmark")}<span><strong>错题复习</strong><small>${c.wrong ? "再练一次，找出薄弱处" : "练习中的错题会收录在这里"}</small></span><b>${num(c.wrong)}</b>${icon("arrow")}</a><a href="#review?scope=favorite">${icon("book")}<span><strong>我的收藏</strong><small>留住值得反复看的题</small></span><b>${num(c.favorites)}</b>${icon("arrow")}</a>${c.wrong ? `<button class="secondary wide" id="start-review">立即复习错题 · ${Math.min(20, c.wrong)} 题</button>` : ""}</section>
-        <section class="recent-panel"><div class="section-title"><h2>最近练习</h2></div>${
-          meta.sessions.length
-            ? `<div class="session-list">${meta.sessions.slice(0, 5).map(sessionHTML).join("")}</div>`
-            : '<p class="recent-empty">还没有练习记录。<br>完成第一组练习后，随时回来继续。</p>'
-        }</section>
-      </aside>
+  const finished = !inProgress.length && latest?.status === "completed" ? latest : null;
+  const name = account.user?.username || "";
+  const countdown =
+    dash.countdown == null
+      ? '<button class="text-link" data-open-settings>设置考试日期</button>'
+      : dash.countdown >= 0
+        ? `距${esc(dash.settings.exam_name || "考试")}还有 <b class="num">${dash.countdown}</b> 天`
+        : `${esc(dash.settings.exam_name || "考试")}已过去 ${-dash.countdown} 天`;
+  const goalLeft = Math.max(0, dash.settings.daily_goal - dash.today.count);
+
+  root.innerHTML = `<header class="dash-hello"><div><h1>${greeting()}，${esc(name)}</h1><p>${countdown}<span class="dot-sep"></span>${goalLeft ? `今日目标 ${dash.settings.daily_goal} 题，还差 <b class="num">${goalLeft}</b> 题` : `今日目标 ${dash.settings.daily_goal} 题已完成`}</p></div>
+    <div class="quick-actions">${inProgress[0] ? `<a class="chip primary-chip" href="#practice/${inProgress[0].id}">${icon("play")}继续练习</a>` : ""}<button class="chip ${inProgress[0] ? "" : "primary-chip"}" data-open-builder id="open-builder">${icon("plus")}自选专项</button>${c.wrong ? `<button class="chip" id="chip-review">${icon("redo")}错题重练<small>${num(c.wrong)}</small></button>` : ""}<a class="chip" href="#library?view=papers">${icon("layers")}真题整卷</a></div></header>
+    <div class="dash-grid">
+      ${resumeCard(inProgress[0], finished, Math.max(0, inProgress.length - 1))}
+      ${weekCard(dash)}
+      ${masteryCard(dash)}
+      ${kpiCards(dash, c.wrong, c.wrong_modules)}
+      ${tasksCard(dash)}
+      <article class="card dash-papers span-5"><div class="card-heading wrap"><h2>真题进度</h2><div class="segmented" role="group" aria-label="真题科目">${PAPER_TABS.map(
+        ([v, t]) => `<button data-paper-subject="${v}">${t}</button>`,
+      ).join("")}</div></div><div id="home-papers"></div></article>
+      ${sessionsCard(meta.sessions)}
     </div>`;
 
-  function selectSubject() {
-    $$("[data-module]", root).forEach((b) => {
-      const on = state.modules.includes(b.dataset.module);
-      b.classList.toggle("selected", on);
-      b.setAttribute("aria-checked", on);
-    });
-    const picker = $("#category-picker", root);
-    if (!picker) return;
-    if (state.modules.length > 1) {
-      // Categories belong to one subject; a mix draws from each whole subject.
-      picker.hidden = true;
-      $("#builder-hint", root).textContent =
-        `${state.modules.join(" + ")} · 共 ${num(state.modules.reduce((n, m) => n + modules[m], 0))} 道 · 各科目平均分配题量，随机混合出题`;
-      return;
-    }
-    const [module] = state.modules;
-    const counts = readyBy(meta.facets, "category", (f) => f.module === module);
-    const categories = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
-    // A single-category subject has nothing to choose.
-    picker.hidden = categories.length < 2;
-    picker.innerHTML = [["", "全部小类", modules[module]]]
-      .concat(categories.map((k) => [k, k, counts[k]]))
-      .map(
-        ([v, t, n]) =>
-          `<button class="chip ${v === state.category ? "selected" : ""}" data-category="${esc(v)}" aria-pressed="${v === state.category}">${esc(t)}<small>${num(n)}</small></button>`,
-      )
-      .join("");
-    $$("[data-category]", root).forEach(
-      (b) =>
-        (b.onclick = () => {
-          state.category = b.dataset.category;
-          selectSubject();
-        }),
-    );
-    $("#builder-hint", root).textContent =
-      `${module}${state.category ? ` · ${state.category}` : ""} · 随机组题，自动跳过待核验题目`;
-  }
-  $$("[data-module]", root).forEach(
+  $$("[data-open-builder]", root).forEach((b) => (b.onclick = () => openBuilder(meta, {}, mastery)));
+  $$("[data-open-settings]", root).forEach(
+    (b) => (b.onclick = () => openSettings(() => renderHome(root, meta))),
+  );
+  $("#edit-focus", root).onclick = () => openSettings(() => renderHome(root, meta), "focus");
+  const startReview = handle(() => startPractice({ mode: "review", count: 20, title: "错题复习" }));
+  [$("#start-review", root), $("#chip-review", root)].forEach((b) => b && (b.onclick = startReview));
+  $$("[data-task]", root).forEach(
     (b) =>
       (b.onclick = () => {
-        const m = b.dataset.module;
-        if (!state.modules.includes(m))
-          state.modules = available.filter(
-            (x) => x === m || state.modules.includes(x),
-          );
-        else if (state.modules.length > 1)
-          state.modules = state.modules.filter((x) => x !== m);
-        else return toast("至少选择一个科目");
-        state.category = "";
-        selectSubject();
+        if (b.dataset.task === "review") return startReview();
+        openBuilder(meta, b.dataset.taskModule ? { modules: [b.dataset.taskModule] } : {}, mastery);
       }),
   );
-  if (available.length) selectSubject();
-
-  const start = $("#quick-start", root);
-  if (start)
-    start.onclick = handle(async () => {
-      start.disabled = true;
-      try {
-        await startPractice({
-          filters: {
-            module:
-              state.modules.length > 1 ? state.modules : state.modules[0],
-            ...(state.category ? { category: state.category } : {}),
-            ...($("#quick-unseen", root).checked ? { unseen: "1" } : {}),
-          },
-          mode: $("#quick-mode", root).value,
-          count: Number($("#quick-count", root).value),
-          title:
-            state.modules.length > 1
-              ? `${state.modules.join("、")} · 综合练习`
-              : `${state.category || state.modules[0]} · 专项练习`,
-        });
-      } finally {
-        start.disabled = false;
-      }
-    });
-  const review = $("#start-review", root);
-  if (review)
-    review.onclick = handle(() =>
-      startPractice({ mode: "review", count: 20, title: "错题复习" }),
-    );
 
   function papers() {
-    $$("[data-paper-subject]", root).forEach((b) => {
-      const on = b.dataset.paperSubject === state.paperSubject;
-      b.classList.toggle("selected", on);
-      b.setAttribute("aria-pressed", on);
-    });
-    const all = meta.papers.filter((p) => {
-      const subject = getPaperSubject(p);
-      return (
-        !NOT_REAL_PAPER.includes(p.kind) &&
-        (state.paperSubject === "计算机专业"
-          ? !["行测", "申论"].includes(subject)
-          : subject === state.paperSubject)
-      );
-    });
-    const list = all.slice(0, state.paperLimit);
-    const rest = all.length - list.length;
-    $("#home-papers", root).innerHTML =
-      (list
-        .map((p) => {
-          const progress = p.done
-            ? `<span class="paper-done ${p.done >= p.ready ? "complete" : ""}">已做 ${num(p.done)} / ${num(p.ready)}</span>`
-            : "";
-          return `<article class="paper-row"><div class="paper-year">${p.year || "—"}</div><div class="paper-copy"><h3>${esc(p.title)}</h3><p>${num(p.ready)} 道可练习 · 建议 ${p.duration_minutes} 分钟${p.total > p.ready ? ` · ${p.total - p.ready} 道待核验` : ""}${progress}</p></div><button class="secondary" data-paper="${esc(p.id)}">${p.done ? "再练一遍" : "开始练习"}</button></article>`;
-        })
-        .join("") ||
-        `<div class="empty"><p>该科目还没有真题。</p><a class="text-link" href="#library?${query({ module: state.paperSubject })}">查看该科目题库</a></div>`) +
-      (rest > 0
-        ? `<button class="quiet more-papers" id="more-papers">显示更多 · 还有 ${rest} 套</button>`
-        : "");
+    $$("[data-paper-subject]", root).forEach((b) =>
+      b.setAttribute("aria-pressed", b.dataset.paperSubject === state.paperSubject),
+    );
+    const list = meta.papers
+      .filter((p) => {
+        const subject = getPaperSubject(p);
+        return (
+          !NOT_REAL_PAPER.includes(p.kind) &&
+          (state.paperSubject === "计算机专业"
+            ? !["行测", "申论"].includes(subject)
+            : subject === state.paperSubject)
+        );
+      })
+      .slice(0, 5);
+    $("#home-papers", root).innerHTML = list.length
+      ? `<div class="table-scroll"><table class="paper-table"><thead><tr><th scope="col">年份</th><th scope="col">试卷</th><th scope="col">完成</th><th scope="col">正确率</th><th scope="col"><span class="visually-hidden">操作</span></th></tr></thead><tbody>${list
+          .map((p) => {
+            const acc = p.graded ? Math.round((p.correct / p.graded) * 100) : null;
+            const share = p.ready ? Math.min(1, p.done / p.ready) : 0;
+            return `<tr><td class="paper-year num">${p.year || "—"}</td><th scope="row" class="paper-name" title="${esc(p.title)}">${esc(p.title.replace(/^\d{4}\s*/, ""))}</th><td><span class="meter thin paper-meter" title="已做 ${p.done} / ${p.ready}"><i style="width:${share * 100}%"></i></span></td><td>${acc == null ? '<span class="pill muted">未开始</span>' : `<span class="pill ${acc >= 80 ? "good" : acc >= 60 ? "info" : "warn"}">${acc}%</span>`}</td><td><button class="quiet" data-paper="${esc(p.id)}">${p.done ? "再练" : "开始"}</button></td></tr>`;
+          })
+          .join("")}</tbody></table></div><a class="text-link more-link" href="#library?view=papers">全部真题${icon("arrow")}</a>`
+      : `<p class="empty-line">该科目还没有真题。</p>`;
     $$("[data-paper]", root).forEach(
       (b) =>
         (b.onclick = handle(() =>
           startPractice({
             filters: { paper_id: b.dataset.paper },
-            mode: $("#quick-mode", root)?.value || "practice",
+            mode: "practice",
             full_paper: true,
             shuffle: false,
             title: meta.papers.find((p) => p.id === b.dataset.paper).title,
           }),
         )),
     );
-    const more = $("#more-papers", root);
-    if (more)
-      more.onclick = () => {
-        state.paperLimit += 10;
-        papers();
-      };
   }
   $$("[data-paper-subject]", root).forEach(
     (b) =>
       (b.onclick = () => {
         state.paperSubject = b.dataset.paperSubject;
-        state.paperLimit = PAPER_PAGE;
         papers();
       }),
   );
   papers();
-
-  const next = $("#next-round", root);
-  if (next)
-    next.onclick = () => {
-      const builder = $(".practice-builder", root);
-      builder.scrollIntoView({
-        block: "start",
-        behavior: matchMedia("(prefers-reduced-motion: reduce)").matches
-          ? "auto"
-          : "smooth",
-      });
-      $("#quick-start", root)?.focus({ preventScroll: true });
-    };
 
   $$("[data-discard]", root).forEach(
     (b) =>
@@ -318,7 +266,7 @@ export async function renderHome(root, meta) {
           ? `已提交的 ${s.answered} 道作答会保留在统计和错题中，这次练习将标记为结束。`
           : "这次练习还没有提交任何作答，草稿会被删除。";
         const d = modal(
-          `<h2>放弃“${esc(s.title)}”？</h2><p class="finish-note">${kept}</p><div class="toolbar"><button class="secondary" id="keep-session">保留</button><button class="primary" id="confirm-discard">放弃练习</button></div>`,
+          `<h2>放弃“${esc(s.title)}”？</h2><p class="muted">${kept}</p><div class="toolbar dialog-actions"><button class="secondary" id="keep-session">保留</button><button class="primary" id="confirm-discard">放弃练习</button></div>`,
         );
         $("#keep-session", d).onclick = () => d.close();
         $("#confirm-discard", d).onclick = handle(async (e) => {
@@ -333,4 +281,9 @@ export async function renderHome(root, meta) {
         });
       }),
   );
+  if (!meta.facets.length)
+    $(".dash-grid", root).insertAdjacentHTML(
+      "afterbegin",
+      `<div class="card span-12 empty"><h2>题库还没有题目</h2><p>${isAdmin() ? "先导入题库，学习中心就会出现练习入口。" : "请联系管理员导入题库。"}</p>${isAdmin() ? '<a class="primary" href="#data">导入题库</a>' : ""}</div>`,
+    );
 }

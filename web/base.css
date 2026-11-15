@@ -386,9 +386,13 @@ body.is-practice #app {
   .appbar {
     padding: 8px max(12px, env(safe-area-inset-right, 0px)) 0 max(12px, env(safe-area-inset-left, 0px));
   }
+  /* backdrop-filter 会让 fixed 子元素以它为参照，底部标签栏就不贴视口了；窄屏顶栏改用不透明底 */
   .appbar-inner {
     height: 50px;
     padding: 0 6px 0 6px;
+    background: var(--glass-fallback);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
   }
   .main-nav {
     position: fixed;
