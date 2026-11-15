@@ -20,7 +20,8 @@ const browser = await chromium.launch({
   headless: true,
   channel: process.env.PLAYWRIGHT_CHANNEL || "msedge",
 });
-const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+// bypassCSP lets Playwright evaluate waitForFunction predicates under the app's strict CSP.
+const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, bypassCSP: true });
 const errors = [],
   checks = [],
   requests = [];
@@ -129,6 +130,34 @@ try {
   await signIn();
   await request("/api/import", { data: payload });
   await check(
+    "study center: dashboard, settings, builder drawer and theme toggle",
+    async () => {
+      await request("/api/settings", {
+        exam_name: "界面回归考试",
+        exam_date: "2099-01-01",
+        daily_goal: 30,
+      });
+      await open("home", "#open-builder");
+      assert.match(await page.locator(".dash-hello").innerText(), /界面回归考试/);
+      assert.equal(await page.locator(".dash-grid .kpi").count(), 4);
+      await page.locator("#open-builder").click();
+      await page.locator("#drawer[open] #quick-start").waitFor();
+      assert(
+        (await page.locator("#drawer [data-module][aria-checked=true]").count()) >= 1,
+      );
+      await page.keyboard.press("Escape");
+      await page.locator("#drawer:not([open])").waitFor({ state: "attached" });
+      const before = await page.evaluate(() => document.documentElement.dataset.theme || "system");
+      await page.locator("#theme-toggle").click();
+      const after = await page.evaluate(() => document.documentElement.dataset.theme || "system");
+      assert.notEqual(before, after);
+      await page.evaluate(() => {
+        delete document.documentElement.dataset.theme;
+        localStorage.removeItem("finreg-theme");
+      });
+    },
+  );
+  await check(
     "practice: no meta prerequisite, correct single auto advances, wrong single stays",
     async () => {
       practice = await create();
@@ -226,11 +255,11 @@ try {
     async () => {
       await page.locator("#next").click();
       await page.locator("#confirm-finish").waitFor();
-      assert.match(await page.locator("dialog").innerText(), /交卷后统一判分/);
+      assert.match(await page.locator("#dialog").innerText(), /交卷后统一判分/);
       await page.locator("#confirm-finish").click();
       await page.locator(".summary-score").waitFor();
       assert.match(await page.locator(".summary-score").innerText(), /100%/);
-      assert.equal(await page.locator("dialog .number-grid .right").count(), 3);
+      assert.equal(await page.locator("#dialog .number-grid .right").count(), 3);
       const finished = await request(`/api/session/${exam.id}`);
       assert.equal(finished.status, "completed");
       assert.equal(finished.attempts.length, 4);
@@ -238,7 +267,7 @@ try {
         drafts: {},
       });
       assert.equal(again.attempts.length, 4);
-      await page.locator('dialog [data-jump="0"]').click();
+      await page.locator('#dialog [data-jump="0"]').click();
       await position(1);
       assert(await page.locator('[data-option="A"]').isDisabled());
       assert.equal(await page.locator("#answer-result .answer-box").count(), 1);
@@ -375,11 +404,21 @@ try {
       });
       await page.locator("#import-preview [role=alert]").waitFor();
       await open("stats", "#group-table");
-      await page.locator("[name=days]").selectOption("30");
+      await page.locator('[data-days="30"]').click();
       await page.waitForFunction(
         () =>
-          document.querySelector(".stats-pair h2")?.textContent === "近30天",
+          document.querySelector("#stats-period")?.textContent === "近 30 天",
       );
+      assert.equal(
+        await page.locator('[data-days="30"]').getAttribute("aria-pressed"),
+        "true",
+      );
+      // The filter panel is a popover; choosing a subject narrows the stats and shows a count.
+      await page.locator("#stats-filter-pop summary").click();
+      await page.locator("#stats-filters [name=module]").selectOption({ index: 1 });
+      await page.locator("#filter-count:not([hidden])").waitFor();
+      await page.locator("#clear-stats-filters").click();
+      await page.locator("#filter-count[hidden]").waitFor({ state: "attached" });
       await page.locator("[data-sort=accuracy]").click();
       assert.equal(
         await page
@@ -398,7 +437,7 @@ try {
       await page.locator("#new-invite").click();
       const code = await page.locator("#fresh-code").inputValue();
       assert.match(code, /^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/);
-      const guest = await browser.newContext({ viewport: { width: 390, height: 844 } });
+      const guest = await browser.newContext({ viewport: { width: 390, height: 844 }, bypassCSP: true });
       const friend = await guest.newPage();
       friend.on("pageerror", (e) => errors.push(e.message));
       try {
@@ -416,7 +455,7 @@ try {
         await friend.locator("[name=confirm]").fill("friend-password");
         await friend.locator("[name=code]").fill(code.toLowerCase());
         await friend.locator("#auth-form button[type=submit]").click();
-        await friend.locator("#quick-start").waitFor();
+        await friend.locator("#open-builder").waitFor();
         assert.equal(await friend.locator("#account-name").innerText(), name);
         assert.equal(await friend.locator('nav a[data-route="data"]').isHidden(), true);
         const mine = await (await friend.request.get(`${base}/api/meta`)).json();
@@ -427,7 +466,7 @@ try {
           "admin keeps their own favorites",
         );
         await friend.goto(`${base}/#data`);
-        await friend.locator("#quick-start").waitFor();
+        await friend.locator("#open-builder").waitFor();
         assert.equal((await friend.request.get(`${base}/api/admin/users`)).status(), 403);
         await friend.locator("#account-button").click();
         await friend.locator("#account-logout").click();
@@ -450,8 +489,9 @@ try {
       for (const width of [1440, 1024, 820, 768, 390, 320]) {
         await page.setViewportSize({ width, height: 900 });
         for (const [route, ready] of [
-          ["home", "#quick-start"],
+          ["home", "#open-builder"],
           ["library", ".question-title"],
+          ["library?view=papers", "#papers-table"],
           ["review?scope=favorite", ".question-title"],
           ["stats", "#group-table"],
           ["data", "#source-search"],

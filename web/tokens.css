@@ -167,18 +167,3 @@
   --scrim: rgba(0, 0, 0, 0.5);
   color-scheme: dark;
 }
-
-/* 旧样式表（过渡期）使用的变量名，映射到新色板。全部页面重写后随 legacy.css 一起删除。 */
-:root {
-  --muted: var(--ink-2);
-  --nav: var(--primary);
-  --blue: var(--primary);
-  --blue-soft: var(--primary-soft);
-  --teal: var(--good);
-  --teal-soft: var(--good-soft);
-  --red: var(--bad);
-  --red-soft: var(--bad-soft);
-  --bg: var(--ground);
-  --card: var(--paper);
-  --radius: var(--r-lg);
-}

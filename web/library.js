@@ -7,10 +7,10 @@ import {
   query,
   options,
   unique,
-  heading,
   sourceLink,
   modal,
   toast,
+  pct,
   startPractice,
   handle,
   paperSubject,
@@ -20,6 +20,82 @@ import {
   debounced,
   isAdmin,
 } from "./ui.js";
+import { icon } from "./icons.js";
+
+function libraryTabs(current) {
+  return `<nav class="segmented view-tabs" aria-label="题库视图">${[
+    ["questions", "按题目", "#library"],
+    ["papers", "按试卷", "#library?view=papers"],
+  ]
+    .map(([k, t, href]) => `<a href="${href}" aria-current="${k === current ? "page" : "false"}" class="${k === current ? "selected" : ""}">${t}</a>`)
+    .join("")}</nav>`;
+}
+
+const PAPER_SUBJECTS = [
+  ["", "全部"],
+  ["计算机专业", "专业科目"],
+  ["行测", "行测"],
+  ["申论", "申论"],
+];
+const PAPERS_PER_PAGE = 15;
+
+// Paper view: every source paper with the user's progress, startable in practice or exam mode.
+async function renderPapers(root, meta, params) {
+  const state = { subject: params.subject || "", search: params.search || "", kind: params.kind || "", page: 1 };
+  root.innerHTML = `<header class="page-heading"><div><h1>题库</h1><p>共 ${num(meta.papers.length)} 套试卷 · 点试卷名查看全部题目</p></div>${libraryTabs("papers")}</header>
+    <section class="card library-filters papers-filters"><div class="filter-main"><div class="segmented" role="group" aria-label="科目">${PAPER_SUBJECTS.map(
+      ([v, t]) => `<button data-subject="${v}" aria-pressed="${v === state.subject}">${t}</button>`,
+    ).join("")}</div><label class="search-control"><span class="visually-hidden">查找试卷</span>${icon("search")}<input id="paper-search" type="search" placeholder="试卷名称或年份" value="${esc(state.search)}"></label><label class="inline-field">类型<select id="paper-kind">${options(unique(meta.papers.map((p) => p.kind)), state.kind)}</select></label></div></section>
+    <section class="card paper results-card"><div class="results-heading"><h2 id="paper-count" aria-live="polite"></h2><span class="caption">完成度按可练习题计算</span></div><div class="table-scroll" id="papers-table"></div><div class="pagination" id="papers-pages"></div></section>`;
+  const matches = (p) => {
+    const subject = paperSubject(p);
+    return (
+      (!state.subject ||
+        (state.subject === "计算机专业" ? !["行测", "申论"].includes(subject) : subject === state.subject)) &&
+      (!state.kind || p.kind === state.kind) &&
+      `${p.title} ${p.year || ""}`.toLowerCase().includes(state.search.toLowerCase())
+    );
+  };
+  function paint() {
+    $$("[data-subject]", root).forEach((b) => b.setAttribute("aria-pressed", b.dataset.subject === state.subject));
+    const list = meta.papers.filter(matches);
+    const pages = Math.max(1, Math.ceil(list.length / PAPERS_PER_PAGE));
+    state.page = Math.min(state.page, pages);
+    $("#paper-count", root).textContent = `${num(list.length)} 套试卷`;
+    const rows = list.slice((state.page - 1) * PAPERS_PER_PAGE, state.page * PAPERS_PER_PAGE);
+    $("#papers-table", root).innerHTML = rows.length
+      ? `<table class="papers-table"><thead><tr><th scope="col">年份</th><th scope="col">试卷</th><th scope="col">类型</th><th scope="col">可练习</th><th scope="col">完成</th><th scope="col">正确率</th><th scope="col"><span class="visually-hidden">操作</span></th></tr></thead><tbody>${rows
+          .map((p) => {
+            const acc = p.graded ? Math.round((p.correct / p.graded) * 100) : null;
+            const share = p.ready ? Math.min(1, p.done / p.ready) : 0;
+            return `<tr><td class="num paper-year">${p.year || "—"}</td><th scope="row"><a class="paper-link" href="#library?paper_id=${encodeURIComponent(p.id)}">${esc(p.title)}</a></th><td><span class="pill muted">${esc(p.kind || "—")}</span></td><td class="num">${num(p.ready)}${p.total > p.ready ? `<small class="caption"> / ${num(p.total)}</small>` : ""}</td><td><span class="paper-progress"><span class="meter thin"><i style="width:${share * 100}%"></i></span><small class="num">${num(p.done)}</small></span></td><td>${acc == null ? '<span class="pill muted">未开始</span>' : `<span class="pill ${acc >= 80 ? "good" : acc >= 60 ? "info" : "warn"}">${pct(acc)}</span>`}</td><td class="row-actions"><button class="quiet" data-paper="${esc(p.id)}" data-mode="practice" ${p.ready ? "" : "disabled"}>练习</button><button class="quiet" data-paper="${esc(p.id)}" data-mode="exam" ${p.ready ? "" : "disabled"}>模考</button></td></tr>`;
+          })
+          .join("")}</tbody></table>`
+      : '<div class="empty"><h3>没有找到试卷</h3><p>试试换个科目，或用更短的关键词。</p></div>';
+    $("#papers-pages", root).innerHTML = `<span>第 ${state.page} / ${pages} 页</span><button class="secondary" id="papers-prev" ${state.page <= 1 ? "disabled" : ""}>上一页</button><button class="secondary" id="papers-next" ${state.page >= pages ? "disabled" : ""}>下一页</button>`;
+    $("#papers-prev", root).onclick = () => (state.page--, paint());
+    $("#papers-next", root).onclick = () => (state.page++, paint());
+    $$("[data-paper]", root).forEach(
+      (b) =>
+        (b.onclick = handle(() =>
+          startPractice({
+            filters: { paper_id: b.dataset.paper },
+            mode: b.dataset.mode,
+            full_paper: true,
+            shuffle: false,
+            title: meta.papers.find((p) => p.id === b.dataset.paper).title,
+          }),
+        )),
+    );
+  }
+  $$("[data-subject]", root).forEach(
+    (b) => (b.onclick = () => ((state.subject = b.dataset.subject), (state.page = 1), paint())),
+  );
+  $("#paper-search", root).oninput = (e) => ((state.search = e.target.value.trim()), (state.page = 1), paint());
+  $("#paper-kind", root).onchange = (e) => ((state.kind = e.target.value), (state.page = 1), paint());
+  paint();
+}
+
 export async function questionDetail(id) {
   const q = await api("/api/question/" + encodeURIComponent(id) + "?answer=1");
   const d = modal(
@@ -114,17 +190,31 @@ export async function renderLibrary(root, meta, view, params) {
       ? "wrong"
       : "all";
   delete state.scope;
+  if (view === "library" && params.view === "papers") return renderPapers(root, meta, params);
+  delete state.view;
   let seq = 0;
-  root.innerHTML =
-    heading(
-      view === "review" ? "错题与收藏" : "我的题库",
-      view === "review"
-        ? "回看错因，留住重点。下一次，答得更有把握。"
-        : `${num(meta.counts.total)} 道题已保存 · ${num(meta.counts.ready)} 道可练习 · ${num(meta.counts.review)} 道待核验`,
-    ) +
-    `
+  const wrongModules = Object.entries(meta.counts.wrong_modules || {}).sort((a, b) => b[1] - a[1]);
+  const wrongStrip =
+    view === "review"
+      ? `<section class="wrong-strip" aria-label="各科目错题">${
+          wrongModules.length
+            ? wrongModules
+                .map(
+                  ([m, n]) =>
+                    `<button class="card wrong-tile ${state.module === m && scope === "wrong" ? "selected" : ""}" data-wrong-module="${esc(m)}"><span>${esc(m)}</span><b class="num">${num(n)}</b><small>道待复习</small></button>`,
+                )
+                .join("")
+            : '<div class="card wrong-tile empty-tile"><span>暂时没有错题</span><small>练习中答错的题会自动收进这里</small></div>'
+        }<a class="card wrong-tile fav-tile ${scope === "favorite" ? "selected" : ""}" href="#review?scope=favorite"><span>${icon("star")}我的收藏</span><b class="num">${num(meta.counts.favorites)}</b><small>道题</small></a></section>`
+      : "";
+  root.innerHTML = `<header class="page-heading"><div><h1>${view === "review" ? "错题收藏" : "题库"}</h1><p>${
+    view === "review"
+      ? `错题按每道题最近一次作答判断，共 ${num(meta.counts.wrong)} 道待复习。`
+      : `${num(meta.counts.total)} 道题 · ${num(meta.counts.ready)} 道可练习 · ${num(meta.counts.review)} 道待核验`
+  }</p></div>${view === "library" ? libraryTabs("questions") : ""}</header>
+    ${wrongStrip}
     <section class="card library-filters" id="library-filters" aria-label="题库筛选">
-      <div class="filter-main"><label class="search-control">搜索题目<input name="search" type="search" placeholder="搜索题干、知识点或解析" value="${esc(state.search)}"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg></label>
+      <div class="filter-main"><label class="search-control"><span class="visually-hidden">搜索题目</span>${icon("search")}<input name="search" type="search" placeholder="搜索题干、知识点或解析" value="${esc(state.search)}"></label>
       <label>学习科目<select name="module">${options(unique(meta.facets.map((f) => f.module)), state.module, "全部科目")}</select></label><label>试卷类型<select name="kind">${options(unique(meta.papers.map((p) => p.kind)), state.kind)}</select></label><button class="secondary" id="reset-filters" hidden>清除筛选</button></div>
       <details class="advanced-filters" ${["exam_level", "year", "category", "paper_id", "type", "quality", "topic", "tag"].some((k) => state[k]) ? "open" : ""}><summary>更多筛选 · 年份、试卷、题型与考点</summary><div class="filter-grid">
       <label>试卷类别<select name="exam_level">${options(unique(meta.papers.map((p) => p.exam_level)), state.exam_level)}</select></label><label>年份<select name="year">${options(
@@ -160,8 +250,15 @@ export async function renderLibrary(root, meta, view, params) {
       )
       .join(
         "",
-      )}</div><div class="toolbar"><label class="inline-field">模式<select id="practice-mode"><option value="practice">练习模式</option><option value="exam">考试模式</option></select></label><label class="inline-field">题量<select id="practice-count"><option>10</option><option selected>20</option><option>30</option><option>50</option></select></label><button id="practice-current" class="primary">开始练习</button><button id="practice-paper" class="secondary" hidden disabled title="请在更多筛选中选择一套试卷">整卷练习</button></div></div>
-    <div class="results-heading"><h2 id="result-count" aria-live="polite">正在查找题目…</h2><span class="muted">点击题目查看解析与笔记</span></div><section id="questions-list" class="question-list" aria-label="题目列表"></section><div id="pagination" class="pagination"></div><p class="caption">错题按最近一次作答判断；待核验题默认不参与练习。题库题数按卷内题次统计。</p>`;
+      )}</div><div class="toolbar practice-controls"><label class="inline-field">方式<select id="practice-mode"><option value="practice">练习模式</option><option value="exam">考试模式</option></select></label><label class="inline-field">题量<select id="practice-count"><option>10</option><option selected>20</option><option>30</option><option>50</option></select></label><button id="practice-paper" class="secondary" hidden disabled title="请在更多筛选中选择一套试卷">整卷练习</button><button id="practice-current" class="primary">${icon("play")}${view === "review" ? "用这些题练习" : "开始练习"}</button></div></div>
+    <section class="card paper results-card"><div class="results-heading"><h2 id="result-count" aria-live="polite">正在查找题目…</h2><span class="caption">点题目查看解析与笔记</span></div><div id="questions-list" class="question-list" aria-label="题目列表"></div><div id="pagination" class="pagination"></div></section><p class="caption">错题按最近一次作答判断；待核验题默认不参与练习。题库题数按卷内题次统计。</p>`;
+  $$("[data-wrong-module]", root).forEach(
+    (b) =>
+      (b.onclick = () => {
+        const m = b.dataset.wrongModule;
+        location.hash = `review?${query(state.module === m && scope === "wrong" ? {} : { module: m })}`;
+      }),
+  );
   function filters() {
     return { ...state, ...(scope !== "all" ? { [scope]: "1" } : {}) };
   }
@@ -245,7 +342,7 @@ export async function renderLibrary(root, meta, view, params) {
       ? d.items
           .map(
             (q) =>
-              `<article class="question-preview"><div class="question-meta"><span class="badge">${esc(q.module)}</span><span>${esc(q.category)}</span><span class="muted">${q.year || ""} · 第${q.number}题 · ${typeLabel(q.type)}</span>${q.quality === "review" ? '<span class="badge warn">待核验</span>' : ""}${q.last_correct === 0 ? '<span class="badge wrong">错题</span>' : ""}</div><button class="question-title" data-id="${esc(q.id)}">${esc(q.stem.replace(/\[\[image:[^\]]+\]\]/g, "[题图]").slice(0, 220))}</button><div class="question-bottom"><span>${esc(q.source)}</span><button class="quiet favorite" data-favorite="${esc(q.id)}" data-value="${q.favorite}" aria-pressed="${Boolean(q.favorite)}">${q.favorite ? "已收藏" : "收藏题目"}</button></div></article>`,
+              `<article class="question-preview"><div class="question-meta"><span class="badge">${esc(q.module)}</span><span>${esc(q.category)}</span><span class="q-sub">${q.year || ""} · 第${q.number}题 · ${typeLabel(q.type)}</span>${q.quality === "review" ? '<span class="pill warn">待核验</span>' : ""}${q.last_correct === 0 ? '<span class="pill bad">错题</span>' : ""}</div><button class="question-title" data-id="${esc(q.id)}">${esc(q.stem.replace(/\[\[image:[^\]]+\]\]/g, "[题图]").slice(0, 220))}</button><div class="question-bottom"><span>${esc(q.source)}</span><button class="quiet fav-button ${q.favorite ? "on" : ""}" data-favorite="${esc(q.id)}" data-value="${q.favorite}" aria-pressed="${Boolean(q.favorite)}">${icon("star")}<span>${q.favorite ? "已收藏" : "收藏"}</span></button></div></article>`,
           )
           .join("")
       : `<div class="empty"><h2>${scope === "wrong" ? "当前没有待复习错题" : scope === "favorite" ? "还没有符合条件的收藏" : "没有找到符合条件的题目"}</h2><p>${scope === "wrong" ? "完成练习后，答错的题目会自动收录在这里。" : "试试减少筛选条件，或在题目详情中收藏重点题。"}</p><button class="secondary" id="empty-reset">清除条件，查看全部题目</button></div>`;

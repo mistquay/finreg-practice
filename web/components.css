@@ -433,6 +433,7 @@ dialog .chip.selected {
   padding: 3px;
   border-radius: var(--r-pill);
   background: var(--track);
+  min-width: 0;
   max-width: 100%;
   overflow-x: auto;
   scrollbar-width: none;
@@ -514,7 +515,9 @@ progress::-moz-progress-bar {
 }
 
 /* ---------- 表格 ---------- */
+/* position:relative 让表头里绝对定位的读屏文字留在滚动容器内，不撑宽页面 */
 .table-scroll {
+  position: relative;
   overflow-x: auto;
   min-width: 0;
 }

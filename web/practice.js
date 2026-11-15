@@ -4,7 +4,6 @@ import {
   esc,
   rich,
   api,
-  heading,
   sourceLink,
   duration,
   pct,
@@ -214,6 +213,7 @@ export async function renderPractice(root, id) {
     $("#sheet-count", root).textContent =
       `${answerCount()} / ${session.question_ids.length}`;
     $(".practice-progress", root).value = answerCount();
+    $("#top-count", root).textContent = `${answerCount()} / ${session.question_ids.length}`;
     $$("[data-jump]", root).forEach(
       (b) => (b.onclick = handle(() => move(Number(b.dataset.jump)))),
     );
@@ -222,7 +222,14 @@ export async function renderPractice(root, id) {
     if (!result) return "";
     if (current.type === "essay")
       return `<section class="answer-box"><h3>${result.unanswered ? "本题未作答" : "作答已保存"} · 对照参考解析</h3><p class="caption">申论不自动判定对错，不计入客观题正确率。</p><h4>我的作答</h4><div class="prose">${rich(result.selected[0] || "未作答")}</div><h4>参考答案与解析</h4><div class="prose">${rich(result.explanation) || "来源未提供参考解析"}</div></section>`;
-    return `<section class="answer-box ${result.correct === 0 ? "incorrect" : ""}"><div class="answer-heading"><strong>${result.unanswered ? "本题未作答" : result.correct === 1 ? "回答正确" : result.correct === 0 ? "回答错误 · 看懂再继续" : "未自动判分"}</strong><span>你的答案 ${result.selected.join("、") || "未作答"} · 参考答案 ${result.answer.join("、") || "未提供"}</span></div><h3>答案解析</h3><div class="prose">${rich(result.explanation) || "来源未提供文字解析，可通过原卷入口核对。"}</div></section>`;
+    const verdict = result.unanswered
+      ? ["muted", "", "本题未作答"]
+      : result.correct === 1
+        ? ["good", "check", "回答正确"]
+        : result.correct === 0
+          ? ["bad", "close", "回答错误 · 看懂再继续"]
+          : ["muted", "", "未自动判分"];
+    return `<section class="answer-box ${result.correct === 0 ? "incorrect" : result.correct === 1 ? "correct" : ""}"><div class="answer-heading"><strong class="verdict ${verdict[0]}">${verdict[1] ? icon(verdict[1]) : ""}${verdict[2]}</strong><span class="answer-keys">你的答案 <b>${result.selected.join("、") || "未作答"}</b><span class="dot-sep"></span>参考答案 <b>${result.answer.join("、") || "未提供"}</b></span></div><h3>答案解析</h3><div class="prose">${rich(result.explanation) || "来源未提供文字解析，可通过原卷入口核对。"}</div></section>`;
   }
   function paintOptions() {
     const locked = busy || paused || Boolean(result) || !active();
@@ -249,7 +256,7 @@ export async function renderPractice(root, id) {
     $("#answer-options", root).innerHTML = Object.entries(current.options)
       .map(
         ([k, v]) =>
-          `<button class="answer-option ${selected.includes(k) ? "chosen" : ""} ${result?.answer.includes(k) ? "correct" : ""} ${result && selected.includes(k) && !result.answer.includes(k) ? "incorrect" : ""}" data-option="${k}" aria-pressed="${selected.includes(k)}" ${locked ? "disabled" : ""}><span class="option-letter">${k}</span><span class="prose">${rich(v)}</span>${result?.answer.includes(k) ? '<span class="option-check">✓</span>' : ""}</button>`,
+          `<button class="answer-option ${selected.includes(k) ? "chosen" : ""} ${result?.answer.includes(k) ? "correct" : ""} ${result && selected.includes(k) && !result.answer.includes(k) ? "incorrect" : ""}" data-option="${k}" aria-pressed="${selected.includes(k)}" ${locked ? "disabled" : ""}><span class="option-letter">${k}</span><span class="prose">${rich(v)}</span>${result?.answer.includes(k) ? `<span class="option-check">${icon("check")}</span>` : ""}</button>`,
       )
       .join("");
     $$("[data-option]", root).forEach(
@@ -323,19 +330,33 @@ export async function renderPractice(root, id) {
       result = results.get(qid);
     }
     last = performance.now();
-    root.innerHTML =
-      heading(
-      session.title,
-        `${exam() ? (active() ? "考试模式 · 交卷后统一判分" : "考试复盘 · 已交卷") : "练习模式 · 单选即答，多选确认后判分"}`,
-        `<div class="toolbar"><button id="focus-toggle" class="secondary" aria-pressed="${document.body.classList.contains("focus-mode")}">${icon("focus")}${document.body.classList.contains("focus-mode") ? "退出专注" : "专注模式"}</button><a class="button secondary" id="back-library" href="#library">返回题库</a></div>`,
-      ) +
-      `
-      <progress class="practice-progress" max="${session.question_ids.length}" value="${answerCount()}" aria-label="本次已作答进度"></progress>
-      <div class="practice-layout ${current.material ? "has-material" : ""}"><section class="card question-card"><div class="practice-top"><div><span class="badge">${esc(current.category)}</span><span class="type-tag type-${esc(current.type)}">${typeLabel(current.type)}</span><span class="muted">第 ${index + 1} / ${session.question_ids.length} 题</span>${current.type === "multiple" && active() && !exam() && !result ? '<span class="type-hint">可选多项，选全后点“确认答案”</span>' : ""}<span id="save-status" class="save-status" role="status">${active() ? "进度自动保存" : "本次练习已结束"}</span></div><div class="toolbar"><span id="question-timer" class="timer">${duration(elapsed)}</span><button class="quiet" id="pause-btn" ${!active() ? "disabled" : ""}>${paused ? "继续计时" : "暂停"}</button></div></div>
-      ${paused && active() ? '<div class="notice">已暂停，继续计时后可以作答。</div>' : ""}
-      <div class="question-body">${current.material ? `<details class="material" open><summary>阅读材料</summary><div class="prose">${rich(current.material)}</div></details>` : ""}<div class="question-pane"><div class="prose question-stem">${rich(current.stem)}</div><div id="answer-options" data-type="${esc(current.type)}"></div><div id="answer-result" aria-live="polite">${resultHTML()}</div></div></div>
-      <div class="practice-actions" aria-label="答题操作">${actionsHTML()}</div><p class="keyboard-hint"><kbd>A</kbd>–<kbd>H</kbd> 选择 · <kbd>Enter</kbd> 确认 / 下一题 · <kbd>←</kbd> <kbd>→</kbd> 切题</p><div class="source-row"><span>${esc(current.source)} · 原卷第${current.number}题</span>${sourceLink(current)}</div></section>
-      <aside class="practice-aside"><section class="card answer-sheet ${sheetOpen ? "" : "mobile-collapsed"}"><div class="card-heading"><h3>答题卡 <small id="sheet-count">${answerCount()} / ${session.question_ids.length}</small></h3><button class="quiet mobile-sheet-toggle" id="sheet-toggle" aria-expanded="${sheetOpen}" aria-controls="answer-numbers">${sheetOpen ? "收起" : "展开"}</button></div><div class="number-grid" id="answer-numbers">${sheetHTML()}</div><div class="sheet-legend">${exam() && active() ? "描边 当前题 · 灰 已填写 · 交卷前不显示对错" : "描边 当前题 · 绿 答对 · 红 答错 · 灰 已作答"}</div><button class="secondary wide" id="finish-session">${active() ? (exam() ? "交卷并查看结果" : "结束并总结") : "查看总结"}</button></section><section class="card note-card"><button class="quiet" id="practice-favorite">${current.favorite ? "已收藏" : "收藏这道题"}</button><label class="field">我的笔记<textarea id="practice-note" rows="4" placeholder="记录知识点与错因，停止输入后自动保存">${esc(current.note)}</textarea></label><button class="secondary wide" id="practice-save-note">保存笔记</button></section></aside></div>`;
+    const total = session.question_ids.length;
+    const focusOn = document.body.classList.contains("focus-mode");
+    const modeText = exam()
+      ? active()
+        ? "考试模式 · 交卷后统一判分"
+        : "考试复盘 · 已交卷"
+      : "练习模式 · 单选即答，多选确认后判分";
+    const legend =
+      exam() && active()
+        ? '<span><i class="key current"></i>当前</span><span><i class="key answered"></i>已填写</span><span class="caption">交卷前不显示对错</span>'
+        : '<span><i class="key current"></i>当前</span><span><i class="key right"></i>答对</span><span><i class="key wrong"></i>答错</span><span><i class="key answered"></i>未判分</span>';
+    root.innerHTML = `<header class="practice-bar glass page-heading">
+        <a class="icon-button" id="back-library" href="#library" aria-label="返回题库" title="返回题库">${icon("left")}</a>
+        <div class="practice-title"><h1>${esc(session.title)}</h1><p>${modeText}</p></div>
+        <div class="practice-meter"><progress class="practice-progress" max="${total}" value="${answerCount()}" aria-label="本次已作答进度"></progress><span class="num" id="top-count">${answerCount()} / ${total}</span></div>
+        <div class="practice-tools"><span id="question-timer" class="timer num" title="本题有效用时">${duration(elapsed)}</span><button class="ghost" id="pause-btn" ${!active() ? "disabled" : ""}>${icon(paused ? "play" : "pause")}<span>${paused ? "继续" : "暂停"}</span></button><button id="focus-toggle" class="ghost" aria-pressed="${focusOn}" title="隐藏答题卡与笔记">${icon("focus")}<span>${focusOn ? "退出专注" : "专注"}</span></button></div>
+      </header>
+      <div class="practice-layout ${current.material ? "has-material" : ""}"><section class="question-card sheet-paper" aria-label="第 ${index + 1} 题">
+        <div class="practice-top"><span class="type-tag type-${esc(current.type)}">${typeLabel(current.type)}</span><span class="badge">${esc(current.category)}</span><span class="q-position">第 ${index + 1} / ${total} 题</span>${current.type === "multiple" && active() && !exam() && !result ? '<span class="type-hint">可多选，选齐后点“确认答案”</span>' : ""}<span class="practice-top-end"><span id="save-status" class="save-status" role="status">${active() ? "进度自动保存" : "本次练习已结束"}</span><button class="quiet fav-button ${current.favorite ? "on" : ""}" id="practice-favorite" aria-pressed="${Boolean(current.favorite)}">${icon("star")}<span>${current.favorite ? "已收藏" : "收藏"}</span></button></span></div>
+        ${paused && active() ? `<div class="notice paused-notice">${icon("pause")}已暂停，继续计时后可以作答。</div>` : ""}
+        <div class="question-body">${current.material ? `<details class="material" open><summary>阅读材料</summary><div class="prose">${rich(current.material)}</div></details>` : ""}<div class="question-pane"><div class="prose question-stem">${rich(current.stem)}</div><div id="answer-options" data-type="${esc(current.type)}"></div><div id="answer-result" aria-live="polite">${resultHTML()}</div></div></div>
+        <div class="practice-actions" aria-label="答题操作">${actionsHTML()}</div>
+        <div class="source-row"><span>${esc(current.source)} · 原卷第${current.number}题</span>${sourceLink(current)}</div>
+        <p class="keyboard-hint"><kbd>A</kbd>–<kbd>H</kbd> 选择<kbd>Enter</kbd> 确认 / 下一题<kbd>←</kbd><kbd>→</kbd> 切题</p>
+      </section>
+      <aside class="practice-aside"><section class="card answer-sheet ${sheetOpen ? "" : "mobile-collapsed"}"><div class="card-heading"><h2>答题卡 <small id="sheet-count" class="num">${answerCount()} / ${total}</small></h2><button class="quiet mobile-sheet-toggle" id="sheet-toggle" aria-expanded="${sheetOpen}" aria-controls="answer-numbers">${sheetOpen ? "收起" : "展开"}</button></div><div class="number-grid" id="answer-numbers">${sheetHTML()}</div><div class="sheet-legend">${legend}</div><button class="secondary wide" id="finish-session">${active() ? (exam() ? "交卷并查看结果" : "结束并总结") : "查看总结"}</button></section>
+      <section class="card note-card"><label class="field" for="practice-note"><span class="note-label">${icon("note")}我的笔记</span></label><textarea id="practice-note" rows="5" placeholder="记录知识点与错因，停止输入后自动保存">${esc(current.note)}</textarea><button class="ghost wide" id="practice-save-note">保存笔记</button></section></aside></div>`;
     paintOptions();
     bindActions();
     refreshSheet();
@@ -343,7 +364,7 @@ export async function renderPractice(root, id) {
       const on = document.body.classList.toggle("focus-mode");
       $("#focus-toggle", root).setAttribute("aria-pressed", on);
       $("#focus-toggle", root).innerHTML =
-        `${icon("focus")}${on ? "退出专注" : "专注模式"}`;
+        `${icon("focus")}<span>${on ? "退出专注" : "专注"}</span>`;
     };
     $("#sheet-toggle", root).onclick = () => {
       sheetOpen = !sheetOpen;
@@ -369,9 +390,10 @@ export async function renderPractice(root, id) {
         favorite: !current.favorite,
       });
       current.favorite = r.favorite;
-      $("#practice-favorite", root).textContent = r.favorite
-        ? "已收藏"
-        : "收藏这道题";
+      const fav = $("#practice-favorite", root);
+      fav.classList.toggle("on", Boolean(r.favorite));
+      fav.setAttribute("aria-pressed", Boolean(r.favorite));
+      fav.innerHTML = `${icon("star")}<span>${r.favorite ? "已收藏" : "收藏"}</span>`;
     });
     const noteInput = $("#practice-note", root);
     const noteQuestion = current;

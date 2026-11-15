@@ -92,7 +92,7 @@ export function gauge(parts, centerValue, centerLabel) {
 
 // Daily answers as bars with the accuracy line on a second 0–100% axis.
 export function trendChart(data) {
-  const w = Math.max(720, data.length * 34),
+  const w = Math.max(940, data.length * 34),
     h = 260,
     left = 40,
     right = 46,
