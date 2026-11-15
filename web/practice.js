@@ -11,6 +11,9 @@ import {
   toast,
   handle,
   modal,
+  startPractice,
+  typeLabel,
+  debounced,
 } from "./ui.js";
 import { icon } from "./icons.js";
 import { sessionSync } from "./session-sync.js";
@@ -34,7 +37,8 @@ export async function renderPractice(root, id) {
     moving = false,
     dead = false,
     sheetOpen = false;
-  let interval,
+  let noteSaver = debounced(() => {}),
+    interval,
     saveInterval,
     localSignature = "",
     revision = session.drafts.__updated || 0;
@@ -120,6 +124,7 @@ export async function renderPractice(root, id) {
     sync.save(true).catch(() => {});
   }
   function exit() {
+    noteSaver.flush();
     hide();
     dead = true;
     clearInterval(interval);
@@ -273,6 +278,7 @@ export async function renderPractice(root, id) {
   }
   async function show() {
     if (dead) return;
+    noteSaver.flush();
     const qid = session.question_ids[index];
     const attempt = session.attempts.find((a) => a.question_id === qid);
     if (!questions.has(qid))
@@ -319,18 +325,17 @@ export async function renderPractice(root, id) {
     last = performance.now();
     root.innerHTML =
       heading(
-        "",
-        session.title,
+      session.title,
         `${exam() ? (active() ? "考试模式 · 交卷后统一判分" : "考试复盘 · 已交卷") : "练习模式 · 单选即答，多选确认后判分"}`,
         `<div class="toolbar"><button id="focus-toggle" class="secondary" aria-pressed="${document.body.classList.contains("focus-mode")}">${icon("focus")}${document.body.classList.contains("focus-mode") ? "退出专注" : "专注模式"}</button><a class="button secondary" id="back-library" href="#library">返回题库</a></div>`,
       ) +
       `
       <progress class="practice-progress" max="${session.question_ids.length}" value="${answerCount()}" aria-label="本次已作答进度"></progress>
-      <div class="practice-layout"><section class="card question-card"><div class="practice-top"><div><span class="badge">${esc(current.category)}</span><span class="type-tag type-${esc(current.type)}">${current.type === "essay" ? "申论题" : current.type === "multiple" ? "多选题" : "单选题"}</span><span class="muted">第 ${index + 1} / ${session.question_ids.length} 题</span>${current.type === "multiple" && active() && !exam() && !result ? '<span class="type-hint">可选多项，选全后点“确认答案”</span>' : ""}<span id="save-status" class="save-status" role="status">${active() ? "进度自动保存" : "本次练习已结束"}</span></div><div class="toolbar"><span id="question-timer" class="timer">${duration(elapsed)}</span><button class="quiet" id="pause-btn" ${!active() ? "disabled" : ""}>${paused ? "继续计时" : "暂停"}</button></div></div>
+      <div class="practice-layout ${current.material ? "has-material" : ""}"><section class="card question-card"><div class="practice-top"><div><span class="badge">${esc(current.category)}</span><span class="type-tag type-${esc(current.type)}">${typeLabel(current.type)}</span><span class="muted">第 ${index + 1} / ${session.question_ids.length} 题</span>${current.type === "multiple" && active() && !exam() && !result ? '<span class="type-hint">可选多项，选全后点“确认答案”</span>' : ""}<span id="save-status" class="save-status" role="status">${active() ? "进度自动保存" : "本次练习已结束"}</span></div><div class="toolbar"><span id="question-timer" class="timer">${duration(elapsed)}</span><button class="quiet" id="pause-btn" ${!active() ? "disabled" : ""}>${paused ? "继续计时" : "暂停"}</button></div></div>
       ${paused && active() ? '<div class="notice">已暂停，继续计时后可以作答。</div>' : ""}
-      ${current.material ? `<details class="material" open><summary>阅读材料</summary><div class="prose">${rich(current.material)}</div></details>` : ""}<div class="prose question-stem">${rich(current.stem)}</div><div id="answer-options" data-type="${esc(current.type)}"></div><div id="answer-result" aria-live="polite">${resultHTML()}</div>
+      <div class="question-body">${current.material ? `<details class="material" open><summary>阅读材料</summary><div class="prose">${rich(current.material)}</div></details>` : ""}<div class="question-pane"><div class="prose question-stem">${rich(current.stem)}</div><div id="answer-options" data-type="${esc(current.type)}"></div><div id="answer-result" aria-live="polite">${resultHTML()}</div></div></div>
       <div class="practice-actions" aria-label="答题操作">${actionsHTML()}</div><p class="keyboard-hint"><kbd>A</kbd>–<kbd>H</kbd> 选择 · <kbd>Enter</kbd> 确认 / 下一题 · <kbd>←</kbd> <kbd>→</kbd> 切题</p><div class="source-row"><span>${esc(current.source)} · 原卷第${current.number}题</span>${sourceLink(current)}</div></section>
-      <aside class="practice-aside"><section class="card answer-sheet ${sheetOpen ? "" : "mobile-collapsed"}"><div class="card-heading"><h3>答题卡 <small id="sheet-count">${answerCount()} / ${session.question_ids.length}</small></h3><button class="quiet mobile-sheet-toggle" id="sheet-toggle" aria-expanded="${sheetOpen}" aria-controls="answer-numbers">${sheetOpen ? "收起" : "展开"}</button></div><div class="number-grid" id="answer-numbers">${sheetHTML()}</div><div class="sheet-legend">${exam() && active() ? "描边 当前题 · 灰 已填写 · 交卷前不显示对错" : "描边 当前题 · 绿 答对 · 红 答错 · 灰 已作答"}</div><button class="secondary wide" id="finish-session">${active() ? (exam() ? "交卷并查看结果" : "结束并总结") : "查看总结"}</button></section><section class="card note-card"><button class="quiet" id="practice-favorite">${current.favorite ? "已收藏" : "收藏这道题"}</button><label class="field">我的笔记<textarea id="practice-note" rows="4" placeholder="记录知识点与错因">${esc(current.note)}</textarea></label><button class="secondary wide" id="practice-save-note">保存笔记</button></section></aside></div>`;
+      <aside class="practice-aside"><section class="card answer-sheet ${sheetOpen ? "" : "mobile-collapsed"}"><div class="card-heading"><h3>答题卡 <small id="sheet-count">${answerCount()} / ${session.question_ids.length}</small></h3><button class="quiet mobile-sheet-toggle" id="sheet-toggle" aria-expanded="${sheetOpen}" aria-controls="answer-numbers">${sheetOpen ? "收起" : "展开"}</button></div><div class="number-grid" id="answer-numbers">${sheetHTML()}</div><div class="sheet-legend">${exam() && active() ? "描边 当前题 · 灰 已填写 · 交卷前不显示对错" : "描边 当前题 · 绿 答对 · 红 答错 · 灰 已作答"}</div><button class="secondary wide" id="finish-session">${active() ? (exam() ? "交卷并查看结果" : "结束并总结") : "查看总结"}</button></section><section class="card note-card"><button class="quiet" id="practice-favorite">${current.favorite ? "已收藏" : "收藏这道题"}</button><label class="field">我的笔记<textarea id="practice-note" rows="4" placeholder="记录知识点与错因，停止输入后自动保存">${esc(current.note)}</textarea></label><button class="secondary wide" id="practice-save-note">保存笔记</button></section></aside></div>`;
     paintOptions();
     bindActions();
     refreshSheet();
@@ -368,11 +373,21 @@ export async function renderPractice(root, id) {
         ? "已收藏"
         : "收藏这道题";
     });
+    const noteInput = $("#practice-note", root);
+    const noteQuestion = current;
+    const saveNote = async () => {
+      const note = noteInput.value;
+      if (note === noteQuestion.note) return;
+      await api(`/api/mark/${noteQuestion.id}`, { note });
+      noteQuestion.note = note;
+      if (noteInput.isConnected) $("#save-status", root).textContent = "笔记已保存";
+    };
+    noteSaver = debounced(() => saveNote().catch(saveError), 1000);
+    noteInput.oninput = () => noteSaver.schedule();
+    noteInput.onblur = () => noteSaver.flush();
     $("#practice-save-note", root).onclick = handle(async () => {
-      await api(`/api/mark/${current.id}`, {
-        note: $("#practice-note", root).value,
-      });
-      current.note = $("#practice-note", root).value;
+      noteSaver.flush();
+      await saveNote();
       toast("笔记已保存");
     });
   }
@@ -474,8 +489,11 @@ export async function renderPractice(root, id) {
       graded = session.attempts.filter((a) => a.correct !== null).length;
     const reviewing = !active(),
       hiddenScore = exam() && active();
+    const wrongIds = reviewing
+      ? session.attempts.filter((a) => a.correct === 0).map((a) => a.question_id)
+      : [];
     const d = modal(
-      `<h2>${reviewing ? "本次练习总结" : exam() ? "确认交卷" : "本次练习总结"}</h2>${hiddenScore ? `<p class="finish-note">已填写 ${count} / ${total} 道${count < total ? `，还有 ${total - count} 道未作答` : ""}。交卷后统一判分，答案将不能修改。</p>` : `<div class="summary-score">${pct(graded ? Math.round((correct / graded) * 1000) / 10 : null)}<span>正确率</span></div><p>已答 ${count} / ${total} 道 · 答对 ${correct} 道 · ${total - count} 道未作答</p><p class="caption">未答题与申论不计入客观题正确率。累计作答用时 ${duration(session.attempts.reduce((n, a) => n + a.elapsed_ms, 0))}。</p>`}${reviewing ? `<div class="number-grid summary-grid">${sheetHTML()}</div>` : ""}<div class="toolbar"><button class="secondary" id="continue-session">${reviewing ? "返回复盘" : "继续作答"}</button>${active() ? `<button class="primary" id="confirm-finish">${exam() ? "确认交卷" : "结束本次练习"}</button>` : '<a href="#stats" class="button primary" id="open-stats">查看统计</a>'}</div>`,
+      `<h2>${reviewing ? "本次练习总结" : exam() ? "确认交卷" : "本次练习总结"}</h2>${hiddenScore ? `<p class="finish-note">已填写 ${count} / ${total} 道${count < total ? `，还有 ${total - count} 道未作答` : ""}。交卷后统一判分，答案将不能修改。</p>` : `<div class="summary-score">${pct(graded ? Math.round((correct / graded) * 1000) / 10 : null)}<span>正确率</span></div><p>已答 ${count} / ${total} 道 · 答对 ${correct} 道 · ${total - count} 道未作答</p><p class="caption">未答题与申论不计入客观题正确率。累计作答用时 ${duration(session.attempts.reduce((n, a) => n + a.elapsed_ms, 0))}。</p>`}${reviewing ? `<div class="number-grid summary-grid">${sheetHTML()}</div>` : ""}<div class="toolbar"><button class="secondary" id="continue-session">${reviewing ? "返回复盘" : "继续作答"}</button>${active() ? `<button class="primary" id="confirm-finish">${exam() ? "确认交卷" : "结束本次练习"}</button>` : `${wrongIds.length ? `<button class="primary" id="retry-wrong">重练本次 ${wrongIds.length} 道错题</button>` : ""}<a href="#stats" class="button ${wrongIds.length ? "secondary" : "primary"}" id="open-stats">查看统计</a>`}</div>`,
     );
     $("#continue-session", d).onclick = () => d.close();
     $$("[data-jump]", d).forEach(
@@ -514,6 +532,21 @@ export async function renderPractice(root, id) {
         } finally {
           busy = false;
           if (b.isConnected) b.disabled = false;
+        }
+      });
+    const retry = $("#retry-wrong", d);
+    if (retry)
+      retry.onclick = handle(async () => {
+        retry.disabled = true;
+        try {
+          d.close();
+          await startPractice({
+            question_ids: wrongIds,
+            mode: "review",
+            title: `${session.title.replace(/ · 错题重练$/, "")} · 错题重练`,
+          });
+        } finally {
+          retry.disabled = false;
         }
       });
     const link = $("#open-stats", d);

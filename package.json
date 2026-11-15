@@ -3,6 +3,6 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "node --check web/app.js && node --check web/practice.js && node --check web/library.js && node --check web/stats.js && node --check web/data.js && node --check web/ui.js && node --check web/home.js && node --check web/icons.js && node --check web/session-sync.js"
+    "check": "node -e \"const {readdirSync}=require('fs');const {execFileSync}=require('child_process');for(const f of readdirSync('web').filter(f=>f.endsWith('.js')))execFileSync(process.execPath,['--check','web/'+f],{stdio:'inherit'})\""
   }
 }

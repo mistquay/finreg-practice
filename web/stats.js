@@ -11,6 +11,7 @@ import {
   pct,
   duration,
   handle,
+  cascadeFacets,
 } from "./ui.js";
 function chart(data) {
   if (!data.some((d) => d.count))
@@ -76,28 +77,11 @@ export async function renderStats(root, meta) {
     seq = 0;
   root.innerHTML =
     heading(
-      "LEARNING ANALYTICS",
       "学习统计",
       "按时间与科目查看作答表现，找到下一步的练习重点。",
     ) +
     `<section class="card filter-bar" id="stats-filters"><label>时间周期<select name="days"><option value="7">近7天</option><option value="30">近30天</option><option value="90">近90天</option><option value="0">全部时间</option></select></label><label>作答口径<select name="attempt"><option value="">全部作答</option><option value="first">仅首次作答</option></select></label><label>练习方式<select name="mode"><option value="">全部方式</option><option value="practice">模块练习</option><option value="review">错题复习</option><option value="exam">整卷练习</option></select></label><label>模块<select name="module">${options(unique(meta.facets.map((f) => f.module)))}</select></label><label>小类<select name="category"></select></label><label>考点<select name="topic"></select></label><label>标签<select name="tag">${options(meta.tags)}</select></label></section><div id="stats-content"></div><p class="caption">统计按北京时间归日；正确率 = 答对次数 / 已判分次数。首次作答指该题在本地的第一次提交；多标签分组之间可能重复计数。</p>`;
-  function facets() {
-    const f = meta.facets.filter(
-      (x) => !state.module || x.module === state.module,
-    );
-    $("[name=category]", root).innerHTML = options(
-      unique(f.map((x) => x.category)),
-      state.category,
-    );
-    $("[name=topic]", root).innerHTML = options(
-      unique(
-        f
-          .filter((x) => !state.category || x.category === state.category)
-          .map((x) => x.topic),
-      ),
-      state.topic,
-    );
-  }
+  const facets = () => cascadeFacets(root, meta.facets, state);
   function table() {
     const groups = [...current.groups].sort((a, b) => {
       const x = a[sort] ?? -1,

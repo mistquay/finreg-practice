@@ -58,6 +58,43 @@ export const duration = (ms = 0) => {
       : `${Math.floor(s / 3600)}小时${Math.floor((s % 3600) / 60)}分`;
 };
 export const pct = (v) => (v == null ? "—" : `${v}%`);
+export const num = (n) => Number(n || 0).toLocaleString("zh-CN");
+const TYPE_LABELS = { single: "单选题", multiple: "多选题", essay: "申论题" };
+export const typeLabel = (type) => TYPE_LABELS[type] || "单选题";
+// Category and topic selects depend on the chosen module; library and stats share this cascade.
+export function cascadeFacets(root, facets, state) {
+  const inModule = facets.filter((f) => !state.module || f.module === state.module);
+  $("[name=category]", root).innerHTML = options(
+    unique(inModule.map((f) => f.category)),
+    state.category,
+  );
+  $("[name=topic]", root).innerHTML = options(
+    unique(
+      inModule
+        .filter((f) => !state.category || f.category === state.category)
+        .map((f) => f.topic),
+    ),
+    state.topic,
+  );
+}
+// Persist free text after the user pauses typing; returns a flush function for blur/leave.
+export function debounced(fn, wait = 800) {
+  let timer;
+  const run = () => {
+    clearTimeout(timer);
+    timer = null;
+    return fn();
+  };
+  return {
+    schedule() {
+      clearTimeout(timer);
+      timer = setTimeout(run, wait);
+    },
+    flush() {
+      return timer ? run() : undefined;
+    },
+  };
+}
 let timer;
 export function toast(message) {
   $("#toast").textContent = message;
@@ -75,7 +112,7 @@ export function handle(fn) {
     }
   };
 }
-export function heading(kicker, title, description, action = "") {
+export function heading(title, description, action = "") {
   return `<div class="page-heading"><div><h1>${esc(title)}</h1><p>${esc(description)}</p></div>${action}</div>`;
 }
 export function sourceLink(q) {

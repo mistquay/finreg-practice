@@ -6,7 +6,6 @@ export async function renderData(root, meta) {
     sourceQuery = "";
   root.innerHTML =
     heading(
-      "",
       "题库与学习档案",
       "导入新题、核验来源、定期备份。所有内容都留在这台电脑。",
     ) +

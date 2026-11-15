@@ -14,17 +14,21 @@ import {
   startPractice,
   handle,
   paperSubject,
+  typeLabel,
+  num,
+  cascadeFacets,
+  debounced,
 } from "./ui.js";
 export async function questionDetail(id) {
   const q = await api("/api/question/" + encodeURIComponent(id) + "?answer=1");
   const d = modal(
-    `<p class="caption">${esc(q.source)} · 第${q.number}题</p><h2>${q.type === "essay" ? "申论主观题" : q.type === "multiple" ? "多选题" : "单选题"} <span class="badge ${q.quality === "review" ? "warn" : ""}">${q.quality === "review" ? "待核验" : "可练习"}</span></h2>${q.issues.length ? `<div class="notice">${q.issues.map(esc).join("；")}</div>` : ""}${q.material ? `<details class="material" open><summary>阅读材料</summary><div class="prose">${rich(q.material)}</div></details>` : ""}<div class="prose question-stem">${rich(q.stem)}</div><div class="detail-options">${Object.entries(
+    `<p class="caption">${esc(q.source)} · 第${q.number}题</p><h2>${typeLabel(q.type)} <span class="badge ${q.quality === "review" ? "warn" : ""}">${q.quality === "review" ? "待核验" : "可练习"}</span></h2>${q.issues.length ? `<div class="notice">${q.issues.map(esc).join("；")}</div>` : ""}${q.material ? `<details class="material" open><summary>阅读材料</summary><div class="prose">${rich(q.material)}</div></details>` : ""}<div class="prose question-stem">${rich(q.stem)}</div><div class="detail-options">${Object.entries(
       q.options,
     )
       .map(([k, v]) => `<p><b>${k}.</b> ${rich(v)}</p>`)
       .join(
         "",
-      )}</div><div class="answer-box"><strong>来源参考答案：${q.type === "essay" ? "见下方文字解析" : q.answer.join("、") || "未提供"}</strong><div class="prose">${rich(q.explanation) || "来源暂未提供文字解析。请结合原卷或课程核对。"}</div></div><p>${sourceLink(q)}</p><div class="toolbar"><button id="detail-favorite" class="secondary">${q.favorite ? "取消收藏" : "收藏题目"}</button><button id="detail-edit" class="secondary">编辑 / 核验</button></div><label class="field">我的笔记<textarea id="detail-note" rows="3">${esc(q.note)}</textarea></label><button id="save-note" class="primary">保存笔记</button>${q.provider ? `<details class="raw"><summary>来源字段 · ${esc(q.provider)} / ${esc(q.external_id)} · 难度 ${q.difficulty ?? "未提供"}</summary><p class="caption">完整原始业务字段保存在本地，未用到的字段也会保留。${q.raw?.platform_statistics?.totalCount != null ? `粉笔平台作答量 ${q.raw.platform_statistics.totalCount} 次，平台正确率 ${Number(q.raw.platform_statistics.correctRatio).toFixed(1)}%（采集时快照，与个人统计分开）。` : ""}</p><pre>${esc(JSON.stringify(q.raw, null, 2))}</pre></details>` : ""}`,
+      )}</div><div class="answer-box"><strong>来源参考答案：${q.type === "essay" ? "见下方文字解析" : q.answer.join("、") || "未提供"}</strong><div class="prose">${rich(q.explanation) || "来源暂未提供文字解析。请结合原卷或课程核对。"}</div></div><p>${sourceLink(q)}</p><div class="toolbar"><button id="detail-favorite" class="secondary">${q.favorite ? "取消收藏" : "收藏题目"}</button><button id="detail-edit" class="secondary">编辑 / 核验</button></div><label class="field">我的笔记<textarea id="detail-note" rows="3" placeholder="停止输入后自动保存">${esc(q.note)}</textarea></label><button id="save-note" class="primary">保存笔记</button>${q.provider ? `<details class="raw"><summary>来源字段 · ${esc(q.provider)} / ${esc(q.external_id)} · 难度 ${q.difficulty ?? "未提供"}</summary><p class="caption">完整原始业务字段保存在本地，未用到的字段也会保留。${q.raw?.platform_statistics?.totalCount != null ? `粉笔平台作答量 ${q.raw.platform_statistics.totalCount} 次，平台正确率 ${Number(q.raw.platform_statistics.correctRatio).toFixed(1)}%（采集时快照，与个人统计分开）。` : ""}</p><pre>${esc(JSON.stringify(q.raw, null, 2))}</pre></details>` : ""}`,
   );
   $("#detail-favorite", d).onclick = handle(async (e) => {
     const v = await api("/api/mark/" + id, { favorite: !q.favorite });
@@ -32,8 +36,19 @@ export async function questionDetail(id) {
     e.target.textContent = q.favorite ? "取消收藏" : "收藏题目";
     toast("已保存");
   });
+  const note = $("#detail-note", d);
+  const saveNote = async () => {
+    if (note.value === q.note) return;
+    await api("/api/mark/" + id, { note: note.value });
+    q.note = note.value;
+    toast("笔记已保存");
+  };
+  const autosave = debounced(handle(saveNote), 1000);
+  note.oninput = () => autosave.schedule();
+  d.addEventListener("close", () => autosave.flush(), { once: true });
   $("#save-note", d).onclick = handle(async () => {
-    await api("/api/mark/" + id, { note: $("#detail-note", d).value });
+    autosave.flush();
+    await saveNote();
     toast("笔记已保存");
   });
   $("#detail-edit", d).onclick = () => edit(q, d);
@@ -98,14 +113,12 @@ export async function renderLibrary(root, meta, view, params) {
       : "all";
   delete state.scope;
   let seq = 0;
-  const count = (n) => Number(n || 0).toLocaleString("zh-CN");
   root.innerHTML =
     heading(
-      "",
       view === "review" ? "错题与收藏" : "我的题库",
       view === "review"
         ? "回看错因，留住重点。下一次，答得更有把握。"
-        : `${count(meta.counts.total)} 道题已保存 · ${count(meta.counts.ready)} 道可练习 · ${count(meta.counts.review)} 道待核验`,
+        : `${num(meta.counts.total)} 道题已保存 · ${num(meta.counts.ready)} 道可练习 · ${num(meta.counts.review)} 道待核验`,
     ) +
     `
     <section class="card library-filters" id="library-filters" aria-label="题库筛选">
@@ -150,23 +163,7 @@ export async function renderLibrary(root, meta, view, params) {
   function filters() {
     return { ...state, ...(scope !== "all" ? { [scope]: "1" } : {}) };
   }
-  function facets() {
-    const f = meta.facets.filter(
-      (f) => !state.module || f.module === state.module,
-    );
-    $("[name=category]", root).innerHTML = options(
-      unique(f.map((f) => f.category)),
-      state.category,
-    );
-    $("[name=topic]", root).innerHTML = options(
-      unique(
-        f
-          .filter((f) => !state.category || f.category === state.category)
-          .map((f) => f.topic),
-      ),
-      state.topic,
-    );
-  }
+  const facets = () => cascadeFacets(root, meta.facets, state);
   function paperOptions() {
     const papers = meta.papers.filter(
       (p) =>
@@ -241,12 +238,12 @@ export async function renderLibrary(root, meta, view, params) {
     $("#practice-current", root).disabled =
       !d.total || state.quality === "review";
     $("#result-count", root).textContent =
-      `${scope === "wrong" ? "待复习错题" : scope === "favorite" ? "已收藏题目" : "筛选结果"} · ${count(d.total)} 道`;
+      `${scope === "wrong" ? "待复习错题" : scope === "favorite" ? "已收藏题目" : "筛选结果"} · ${num(d.total)} 道`;
     list.innerHTML = d.items.length
       ? d.items
           .map(
             (q) =>
-              `<article class="question-preview"><div class="question-meta"><span class="badge">${esc(q.module)}</span><span>${esc(q.category)}</span><span class="muted">${q.year || ""} · 第${q.number}题 · ${q.type === "essay" ? "申论主观题" : q.type === "multiple" ? "多选" : "单选"}</span>${q.quality === "review" ? '<span class="badge warn">待核验</span>' : ""}${q.last_correct === 0 ? '<span class="badge wrong">错题</span>' : ""}</div><button class="question-title" data-id="${esc(q.id)}">${esc(q.stem.replace(/\[\[image:[^\]]+\]\]/g, "[题图]").slice(0, 220))}</button><div class="question-bottom"><span>${esc(q.source)}</span><button class="quiet favorite" data-favorite="${esc(q.id)}" data-value="${q.favorite}" aria-pressed="${Boolean(q.favorite)}">${q.favorite ? "已收藏" : "收藏题目"}</button></div></article>`,
+              `<article class="question-preview"><div class="question-meta"><span class="badge">${esc(q.module)}</span><span>${esc(q.category)}</span><span class="muted">${q.year || ""} · 第${q.number}题 · ${typeLabel(q.type)}</span>${q.quality === "review" ? '<span class="badge warn">待核验</span>' : ""}${q.last_correct === 0 ? '<span class="badge wrong">错题</span>' : ""}</div><button class="question-title" data-id="${esc(q.id)}">${esc(q.stem.replace(/\[\[image:[^\]]+\]\]/g, "[题图]").slice(0, 220))}</button><div class="question-bottom"><span>${esc(q.source)}</span><button class="quiet favorite" data-favorite="${esc(q.id)}" data-value="${q.favorite}" aria-pressed="${Boolean(q.favorite)}">${q.favorite ? "已收藏" : "收藏题目"}</button></div></article>`,
           )
           .join("")
       : `<div class="empty"><h2>${scope === "wrong" ? "当前没有待复习错题" : scope === "favorite" ? "还没有符合条件的收藏" : "没有找到符合条件的题目"}</h2><p>${scope === "wrong" ? "完成练习后，答错的题目会自动收录在这里。" : "试试减少筛选条件，或在题目详情中收藏重点题。"}</p><button class="secondary" id="empty-reset">清除条件，查看全部题目</button></div>`;

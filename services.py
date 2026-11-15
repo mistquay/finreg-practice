@@ -1,85 +1,158 @@
+"""Study logic: question queries, practice sessions, scoring, marks and statistics."""
 from __future__ import annotations
-import json,uuid,random
-from datetime import datetime,timedelta,timezone
-from collections import defaultdict
-from database import connect,decode,FIELDS
-TZ=timezone(timedelta(hours=8))
 
-def now(): return datetime.now(TZ).isoformat(timespec='seconds')
-def where(filters,alias='q'):
-    clauses=[]; values=[]
-    for key in ('module','category','topic','paper_id','quality','type','year'):
-        if filters.get(key): clauses.append(f'{alias}.{key}=?'); values.append(filters[key])
-    for key in ('kind','exam_level'):
+import json
+import random
+import uuid
+from collections import defaultdict
+from datetime import datetime, timedelta, timezone
+
+from database import FIELDS, connect, decode
+
+TZ = timezone(timedelta(hours=8))
+MODE_TITLES = {'practice': '模块练习', 'review': '错题复习', 'exam': '整卷练习'}
+MAX_SESSION_QUESTIONS = 200
+# Answers in an unsubmitted exam are drafts: they never count toward stats, wrong lists or coverage.
+COUNTED = "(s.mode!='exam' OR s.status='completed')"
+QUESTION_COLUMNS = ','.join(k for k in FIELDS if k != 'raw')
+
+
+def now():
+    return datetime.now(TZ).isoformat(timespec='seconds')
+
+
+def _last_correct(alias):
+    return (f'(SELECT a.correct FROM attempts a JOIN sessions s ON s.id=a.session_id '
+            f'WHERE a.question_id={alias}.id AND {COUNTED} ORDER BY a.id DESC LIMIT 1)')
+
+
+def where(filters, alias='q'):
+    """Translate query-string filters into a SQL condition over the questions table."""
+    clauses, values = [], []
+    for key in ('module', 'category', 'topic', 'paper_id', 'quality', 'type', 'year'):
+        if filters.get(key):
+            clauses.append(f'{alias}.{key}=?')
+            values.append(filters[key])
+    for key in ('kind', 'exam_level'):
         if filters.get(key):
             clauses.append(f'EXISTS(SELECT 1 FROM papers p WHERE p.id={alias}.paper_id AND p.{key}=?)')
             values.append(filters[key])
     if filters.get('tag'):
-        clauses.append(f'EXISTS(SELECT 1 FROM json_each({alias}.tags) WHERE value=?)'); values.append(filters['tag'])
+        clauses.append(f'EXISTS(SELECT 1 FROM json_each({alias}.tags) WHERE value=?)')
+        values.append(filters['tag'])
     if filters.get('search'):
-        clauses.append(f'({alias}.stem LIKE ? OR {alias}.explanation LIKE ?)'); values.extend(['%'+filters['search']+'%']*2)
-    if filters.get('favorite')=='1': clauses.append(f'EXISTS(SELECT 1 FROM marks m WHERE m.question_id={alias}.id AND m.favorite=1)')
-    if filters.get('wrong')=='1': clauses.append(f"(SELECT a.correct FROM attempts a JOIN sessions s ON s.id=a.session_id WHERE a.question_id={alias}.id AND (s.mode!='exam' OR s.status='completed') ORDER BY a.id DESC LIMIT 1)=0")
-    if filters.get('unseen')=='1': clauses.append(f"NOT EXISTS(SELECT 1 FROM attempts a JOIN sessions s ON s.id=a.session_id WHERE a.question_id={alias}.id AND (s.mode!='exam' OR s.status='completed'))")
-    return (' AND '.join(clauses) or '1=1'),values
+        clauses.append(f'({alias}.stem LIKE ? OR {alias}.explanation LIKE ?)')
+        values.extend(['%' + filters['search'] + '%'] * 2)
+    if filters.get('favorite') == '1':
+        clauses.append(f'EXISTS(SELECT 1 FROM marks m WHERE m.question_id={alias}.id AND m.favorite=1)')
+    if filters.get('wrong') == '1':
+        clauses.append(f'{_last_correct(alias)}=0')
+    if filters.get('unseen') == '1':
+        clauses.append(f'NOT EXISTS(SELECT 1 FROM attempts a JOIN sessions s ON s.id=a.session_id '
+                       f'WHERE a.question_id={alias}.id AND {COUNTED})')
+    return (' AND '.join(clauses) or '1=1'), values
+
+
+# ---------------------------------------------------------------- questions
 
 def list_questions(filters):
-    clause,args=where(filters); page=max(1,int(filters.get('page',1))); limit=min(100,max(1,int(filters.get('limit',20))))
+    clause, args = where(filters)
+    page = max(1, int(filters.get('page', 1)))
+    limit = min(100, max(1, int(filters.get('limit', 20))))
+    columns = ','.join('q.' + k for k in FIELDS if k not in ('answer', 'explanation', 'raw'))
     with connect() as c:
-        total=c.execute(f'SELECT count(*) FROM questions q WHERE {clause}',args).fetchone()[0]
-        columns=','.join('q.'+k for k in FIELDS if k not in ('answer','explanation','raw'))
-        rows=c.execute(f'''SELECT {columns},coalesce(m.favorite,0) favorite,coalesce(m.note,'') note,
-        (SELECT a.correct FROM attempts a JOIN sessions s ON s.id=a.session_id WHERE a.question_id=q.id
-            AND (s.mode!='exam' OR s.status='completed') ORDER BY a.id DESC LIMIT 1) last_correct
-        FROM questions q LEFT JOIN marks m ON m.question_id=q.id WHERE {clause} ORDER BY q.year DESC,q.paper_id,q.number LIMIT ? OFFSET ?''',args+[limit,(page-1)*limit]).fetchall()
-    items=[decode(r) for r in rows]
-    for q in items:
-        for k in ('answer','explanation','raw'): q.pop(k,None)
-    return {'items':items,'total':total,'page':page,'pages':(total+limit-1)//limit}
+        total = c.execute(f'SELECT count(*) FROM questions q WHERE {clause}', args).fetchone()[0]
+        rows = c.execute(f'''SELECT {columns}, coalesce(m.favorite,0) favorite, coalesce(m.note,'') note,
+            {_last_correct('q')} last_correct
+            FROM questions q LEFT JOIN marks m ON m.question_id=q.id WHERE {clause}
+            ORDER BY q.year DESC, q.paper_id, q.number LIMIT ? OFFSET ?''',
+                         args + [limit, (page - 1) * limit]).fetchall()
+    return {'items': [decode(r) for r in rows], 'total': total, 'page': page,
+            'pages': (total + limit - 1) // limit}
+
+
+def get_question(qid, with_answer=False, include_raw=True):
+    excluded = set() if with_answer else {'answer', 'explanation', 'raw'}
+    if not include_raw:
+        excluded.add('raw')
+    columns = ','.join('q.' + k for k in FIELDS if k not in excluded)
+    with connect() as c:
+        row = c.execute(f'''SELECT {columns}, q.edited, coalesce(m.favorite,0) favorite, coalesce(m.note,'') note
+            FROM questions q LEFT JOIN marks m ON q.id=m.question_id WHERE q.id=?''', (qid,)).fetchone()
+    if not row:
+        raise ValueError('题目不存在')
+    return decode(row)
+
 
 def metadata():
+    """Everything the non-practice screens need in one request: papers, facets, counts, recent sessions."""
     with connect() as c:
-        papers=[dict(r) for r in c.execute('SELECT p.id,p.title,p.year,p.duration_minutes,p.subject,p.kind,p.exam_level,count(q.paper_id) total,coalesce(sum(q.quality="ready"),0) ready FROM papers p LEFT JOIN questions q ON q.paper_id=p.id GROUP BY p.id ORDER BY p.year DESC')]
-        facets=[dict(r) for r in c.execute('SELECT module,category,topic,count(*) total,sum(quality="ready") ready,sum(quality="review") review FROM questions GROUP BY module,category,topic')]
-        tags=[r[0] for r in c.execute('SELECT DISTINCT j.value FROM (SELECT DISTINCT tags FROM questions) t,json_each(t.tags) j ORDER BY j.value')]
-        counts={k:sum(f[k] for f in facets) for k in ('total','ready','review')}
-        for facet in facets: facet.pop('review')
-        counts['favorites']=c.execute('SELECT count(*) FROM marks WHERE favorite=1').fetchone()[0]
-        counts['wrong']=c.execute('''SELECT count(*) FROM attempts a JOIN sessions s ON s.id=a.session_id
-            WHERE (s.mode!='exam' OR s.status='completed') AND a.correct=0 AND a.id=(
-            SELECT max(b.id) FROM attempts b JOIN sessions t ON t.id=b.session_id
-            WHERE b.question_id=a.question_id AND (t.mode!='exam' OR t.status='completed'))''').fetchone()[0]
-        counts['seen']=c.execute("SELECT count(DISTINCT a.question_id) FROM attempts a JOIN sessions s ON s.id=a.session_id WHERE s.mode!='exam' OR s.status='completed'").fetchone()[0]
-        sessions=[dict(r) for r in c.execute('SELECT id,title,mode,created_at,status,position,json_array_length(question_ids) total FROM sessions ORDER BY created_at DESC LIMIT 12')]
-    return {'papers':papers,'facets':facets,'tags':tags,'counts':counts,'sessions':sessions}
+        papers = [dict(r) for r in c.execute('''SELECT p.id, p.title, p.year, p.duration_minutes, p.subject,
+            p.kind, p.exam_level, count(q.paper_id) total, coalesce(sum(q.quality='ready'),0) ready
+            FROM papers p LEFT JOIN questions q ON q.paper_id=p.id GROUP BY p.id ORDER BY p.year DESC''')]
+        facets = [dict(r) for r in c.execute('''SELECT module, category, topic, count(*) total,
+            sum(quality='ready') ready, sum(quality='review') review
+            FROM questions GROUP BY module, category, topic''')]
+        tags = [r[0] for r in c.execute('''SELECT DISTINCT j.value FROM (SELECT DISTINCT tags FROM questions) t,
+            json_each(t.tags) j ORDER BY j.value''')]
+        counts = {k: sum(f[k] for f in facets) for k in ('total', 'ready', 'review')}
+        for facet in facets:
+            facet.pop('review')
+        counts['favorites'] = c.execute('SELECT count(*) FROM marks WHERE favorite=1').fetchone()[0]
+        counts['wrong'] = c.execute(f'''SELECT count(*) FROM attempts a JOIN sessions s ON s.id=a.session_id
+            WHERE {COUNTED} AND a.correct=0 AND a.id=(
+                SELECT max(b.id) FROM attempts b JOIN sessions s ON s.id=b.session_id
+                WHERE b.question_id=a.question_id AND {COUNTED})''').fetchone()[0]
+        counts['seen'] = c.execute(f'''SELECT count(DISTINCT a.question_id) FROM attempts a
+            JOIN sessions s ON s.id=a.session_id WHERE {COUNTED}''').fetchone()[0]
+        done = dict(c.execute(f'''SELECT q.paper_id, count(DISTINCT a.question_id) FROM attempts a
+            JOIN sessions s ON s.id=a.session_id JOIN questions q ON q.id=a.question_id
+            WHERE {COUNTED} GROUP BY q.paper_id''').fetchall())
+        for paper in papers:
+            paper['done'] = done.get(paper['id'], 0)
+        sessions = [dict(r) for r in c.execute('''SELECT id, title, mode, created_at, status, position,
+            json_array_length(question_ids) total,
+            (SELECT count(*) FROM attempts a WHERE a.session_id=sessions.id) answered
+            FROM sessions ORDER BY created_at DESC LIMIT 12''')]
+    return {'papers': papers, 'facets': facets, 'tags': tags, 'counts': counts, 'sessions': sessions}
 
-def get_question(qid,with_answer=False,include_raw=True):
-    with connect() as c:
-        excluded=set() if with_answer else {'answer','explanation','raw'}
-        if not include_raw: excluded.add('raw')
-        columns=','.join('q.'+k for k in FIELDS if k not in excluded)
-        r=c.execute(f'SELECT {columns},q.edited,coalesce(m.favorite,0) favorite,coalesce(m.note,\'\') note FROM questions q LEFT JOIN marks m ON q.id=m.question_id WHERE q.id=?',(qid,)).fetchone()
-    if not r: raise ValueError('题目不存在')
-    q=decode(r)
-    return q
+
+# ---------------------------------------------------------------- sessions
 
 def create_session(data):
-    mode=data.get('mode','practice')
-    if mode not in ('practice','review','exam'): raise ValueError('无效练习模式')
-    filters=dict(data.get('filters') or {},quality='ready')
-    if mode=='review': filters['wrong']='1'
-    clause,args=where(filters)
+    mode = data.get('mode', 'practice')
+    if mode not in MODE_TITLES:
+        raise ValueError('无效练习模式')
+    explicit = data.get('question_ids')
     with connect() as c:
-        rows=c.execute(f'SELECT id FROM questions q WHERE {clause} ORDER BY year DESC,paper_id,number',args).fetchall()
-        ids=[r['id'] for r in rows]
-        if data.get('shuffle',mode!='exam' or not filters.get('paper_id')): random.shuffle(ids)
-        if not data.get('full_paper') and (mode!='exam' or data.get('count') is not None):
-            ids=ids[:min(200,max(1,int(data.get('count',20))))]
-        if not ids: raise ValueError('当前条件下没有可练习题目；待核验题默认不参与组卷。')
-        sid=uuid.uuid4().hex
-        title=str(data.get('title') or {'practice':'模块练习','review':'错题复习','exam':'整卷练习'}[mode])[:120]
-        c.execute('INSERT INTO sessions(id,created_at,mode,title,question_ids) VALUES(?,?,?,?,?)',(sid,now(),mode,title,json.dumps(ids)))
+        if explicit is not None:
+            # Re-practice a known set (e.g. the wrong answers of a finished session) in the given order.
+            if not isinstance(explicit, list) or not all(isinstance(x, str) for x in explicit):
+                raise ValueError('题目列表格式错误')
+            ready = {r['id'] for r in c.execute(
+                "SELECT id FROM questions WHERE quality='ready' AND id IN (SELECT value FROM json_each(?))",
+                (json.dumps(explicit),))}
+            ids = [x for x in dict.fromkeys(explicit) if x in ready][:MAX_SESSION_QUESTIONS]
+        else:
+            filters = dict(data.get('filters') or {}, quality='ready')
+            if mode == 'review':
+                filters['wrong'] = '1'
+            clause, args = where(filters)
+            ids = [r['id'] for r in c.execute(
+                f'SELECT id FROM questions q WHERE {clause} ORDER BY year DESC, paper_id, number', args)]
+            # A whole paper in exam mode keeps its original order unless shuffling is asked for.
+            if data.get('shuffle', mode != 'exam' or not filters.get('paper_id')):
+                random.shuffle(ids)
+            if not data.get('full_paper') and (mode != 'exam' or data.get('count') is not None):
+                ids = ids[:min(MAX_SESSION_QUESTIONS, max(1, int(data.get('count', 20))))]
+        if not ids:
+            raise ValueError('当前条件下没有可练习题目；待核验题默认不参与组卷。')
+        sid = uuid.uuid4().hex
+        title = str(data.get('title') or MODE_TITLES[mode])[:120]
+        c.execute('INSERT INTO sessions(id,created_at,mode,title,question_ids) VALUES(?,?,?,?,?)',
+                  (sid, now(), mode, title, json.dumps(ids)))
     return get_session(sid)
+
 
 def _read_session(conn, sid):
     row = conn.execute('SELECT * FROM sessions WHERE id=?', (sid,)).fetchone()
@@ -94,6 +167,23 @@ def _read_session(conn, sid):
         attempt['selected'] = json.loads(attempt['selected'])
         attempt['answer_snapshot'] = json.loads(attempt['answer_snapshot'])
     return session
+
+
+def _load_questions(conn, ids):
+    rows = conn.execute(f'SELECT {QUESTION_COLUMNS} FROM questions WHERE id IN (SELECT value FROM json_each(?))',
+                        (json.dumps(ids),))
+    return {r['id']: decode(r) for r in rows}
+
+
+def _clamp_position(session, data):
+    return max(0, min(len(session['question_ids']) - 1, int(data.get('position', session['position']))))
+
+
+def _drafts(session, data):
+    drafts = data.get('drafts', session['drafts'])
+    if not isinstance(drafts, dict):
+        raise ValueError('暂存数据格式错误')
+    return drafts
 
 
 def get_session(sid):
@@ -128,10 +218,10 @@ def _validate_answer(question, selected, elapsed):
 
 
 def _record_answer(conn, session, question, selected, elapsed, replace=False):
+    """Store one answer. Without `replace`, a repeated submission returns the first result unchanged."""
     selected, elapsed = _validate_answer(question, selected, elapsed)
-    correct = (int(selected == sorted(question['answer']))
-               if question['type'] != 'essay' and question['answer'] and question['quality'] == 'ready'
-               else None)
+    gradable = question['type'] != 'essay' and question['answer'] and question['quality'] == 'ready'
+    correct = int(selected == sorted(question['answer'])) if gradable else None
     snapshot = [question['explanation']] if question['type'] == 'essay' else question['answer']
     old = conn.execute('SELECT * FROM attempts WHERE session_id=? AND question_id=?',
                        (session['id'], question['id'])).fetchone()
@@ -146,15 +236,17 @@ def _record_answer(conn, session, question, selected, elapsed, replace=False):
                                  (question['id'],)).fetchone()
         conn.execute('''INSERT INTO attempts(question_id,session_id,selected,correct,elapsed_ms,
             created_at,is_first,mode,answer_snapshot) VALUES(?,?,?,?,?,?,?,?,?)''',
-            (question['id'], session['id'], json.dumps(selected), correct, elapsed, now(),
-             int(first), session['mode'], json.dumps(snapshot)))
+                     (question['id'], session['id'], json.dumps(selected), correct, elapsed, now(),
+                      int(first), session['mode'], json.dumps(snapshot)))
+    essay = question['type'] == 'essay'
     return dict(question_id=question['id'], correct=correct, selected=selected,
                 elapsed_ms=elapsed, answer=snapshot,
-                explanation=snapshot[0] if question['type'] == 'essay' and snapshot else question['explanation'],
+                explanation=snapshot[0] if essay and snapshot else question['explanation'],
                 duplicate=bool(old))
 
 
 def update_session(sid, data):
+    """Autosave position and drafts. Returns a light acknowledgement, not the whole session."""
     if data.get('status') == 'completed':
         return finish_session(sid, data)
     if data.get('status', 'active') != 'active':
@@ -165,10 +257,8 @@ def update_session(sid, data):
         # An in-flight autosave must never reopen or overwrite a submitted exam.
         if session['status'] == 'completed':
             return dict(saved=True, status='completed', position=session['position'])
-        position = max(0, min(len(session['question_ids']) - 1, int(data.get('position', session['position']))))
-        drafts = data.get('drafts', session['drafts'])
-        if not isinstance(drafts, dict):
-            raise ValueError('暂存数据格式错误')
+        position = _clamp_position(session, data)
+        drafts = _drafts(session, data)
         if drafts.get('__updated', 0) < session['drafts'].get('__updated', 0):
             return dict(saved=True, stale=True, status='active', position=session['position'])
         conn.execute('UPDATE sessions SET position=?,drafts=? WHERE id=?',
@@ -177,6 +267,7 @@ def update_session(sid, data):
 
 
 def answer(sid, data):
+    """Grade one question immediately (practice and review modes)."""
     with connect() as conn:
         conn.execute('BEGIN IMMEDIATE')
         session = _read_session(conn, sid)
@@ -188,79 +279,122 @@ def answer(sid, data):
         old = conn.execute('SELECT 1 FROM attempts WHERE session_id=? AND question_id=?', (sid, qid)).fetchone()
         if session['status'] != 'active' and not old:
             raise ValueError('练习已结束')
-        question = decode(conn.execute('SELECT ' + ','.join(k for k in FIELDS if k != 'raw') +
-                                      ' FROM questions WHERE id=?', (qid,)).fetchone())
+        question = _load_questions(conn, [qid])[qid]
         return _record_answer(conn, session, question, data.get('selected'), data.get('elapsed_ms', 0))
 
 
+def _is_blank(question, selected):
+    if not selected:
+        return True
+    return (question['type'] == 'essay' and isinstance(selected, list) and len(selected) == 1
+            and isinstance(selected[0], str) and not selected[0].strip())
+
+
 def finish_session(sid, data):
+    """End a session. Exams are graded here, atomically, from the submitted drafts."""
     with connect() as conn:
         conn.execute('BEGIN IMMEDIATE')
         session = _read_session(conn, sid)
         if session['status'] == 'active':
-            drafts = data.get('drafts', session['drafts'])
-            if not isinstance(drafts, dict):
-                raise ValueError('暂存数据格式错误')
-            position = max(0, min(len(session['question_ids']) - 1, int(data.get('position', session['position']))))
+            drafts = _drafts(session, data)
+            position = _clamp_position(session, data)
             if session['mode'] == 'exam':
-                questions = {r['id']: decode(r) for r in conn.execute(
-                    'SELECT ' + ','.join(k for k in FIELDS if k != 'raw') +
-                    ' FROM questions WHERE id IN (SELECT value FROM json_each(?))',
-                    (json.dumps(session['question_ids']),))}
+                questions = _load_questions(conn, session['question_ids'])
                 previous = {a['question_id']: a for a in session['attempts']}
                 for qid in session['question_ids']:
                     draft = drafts.get(qid, previous.get(qid, {}))
                     if not isinstance(draft, dict):
                         raise ValueError('单题暂存数据格式错误')
                     selected = draft.get('selected', [])
-                    blank_essay = (questions[qid]['type'] == 'essay' and isinstance(selected, list)
-                                   and len(selected) == 1 and isinstance(selected[0], str) and not selected[0].strip())
-                    if not selected or blank_essay:
+                    if _is_blank(questions[qid], selected):
                         # Removing a previously selected answer leaves it unscored.
                         conn.execute('DELETE FROM attempts WHERE session_id=? AND question_id=?', (sid, qid))
                         continue
-                    _record_answer(conn, session, questions[qid], selected, draft.get('elapsed_ms', 0), replace=True)
+                    _record_answer(conn, session, questions[qid], selected, draft.get('elapsed_ms', 0),
+                                   replace=True)
             conn.execute("UPDATE sessions SET position=?,drafts=?,status='completed' WHERE id=?",
                          (position, json.dumps(drafts, ensure_ascii=False), sid))
     return get_session(sid)
 
 
-def mark(qid,data):
+def discard_session(sid):
+    """Drop an unfinished session. Practice answers already submitted stay in the history."""
+    with connect() as conn:
+        conn.execute('BEGIN IMMEDIATE')
+        session = _read_session(conn, sid)
+        if session['status'] != 'active':
+            return dict(discarded=False, status='completed')
+        if session['attempts']:
+            conn.execute("UPDATE sessions SET status='completed' WHERE id=?", (sid,))
+            return dict(discarded=False, status='completed')
+        conn.execute('DELETE FROM sessions WHERE id=?', (sid,))
+    return dict(discarded=True, status='deleted')
+
+
+# ---------------------------------------------------------------- marks
+
+def mark(qid, data):
     get_question(qid)
     with connect() as c:
-        old=c.execute('SELECT * FROM marks WHERE question_id=?',(qid,)).fetchone()
-        favorite=int(bool(data.get('favorite',old['favorite'] if old else False)))
-        note=str(data.get('note',old['note'] if old else ''))[:20000]
-        c.execute('INSERT INTO marks(question_id,favorite,note) VALUES(?,?,?) ON CONFLICT(question_id) DO UPDATE SET favorite=excluded.favorite,note=excluded.note',(qid,favorite,note))
-    return {'favorite':favorite,'note':note}
+        old = c.execute('SELECT * FROM marks WHERE question_id=?', (qid,)).fetchone()
+        favorite = int(bool(data.get('favorite', old['favorite'] if old else False)))
+        note = str(data.get('note', old['note'] if old else ''))[:20000]
+        c.execute('''INSERT INTO marks(question_id,favorite,note) VALUES(?,?,?) ON CONFLICT(question_id)
+            DO UPDATE SET favorite=excluded.favorite, note=excluded.note''', (qid, favorite, note))
+    return {'favorite': favorite, 'note': note}
+
+
+# ---------------------------------------------------------------- statistics
 
 def aggregate(rows):
-    graded=[r for r in rows if r['correct'] is not None]; correct=sum(r['correct']==1 for r in graded)
-    elapsed=sum(r['elapsed_ms'] for r in rows)
-    return {'count':len(rows),'graded':len(graded),'correct':correct,'wrong':len(graded)-correct,
-        'accuracy':round(correct/len(graded)*100,1) if graded else None,'elapsed_ms':elapsed,'avg_ms':round(elapsed/len(rows)) if rows else 0,
-        'unique':len({r['question_id'] for r in rows})}
+    graded = [r for r in rows if r['correct'] is not None]
+    correct = sum(r['correct'] == 1 for r in graded)
+    elapsed = sum(r['elapsed_ms'] for r in rows)
+    return {'count': len(rows), 'graded': len(graded), 'correct': correct, 'wrong': len(graded) - correct,
+            'accuracy': round(correct / len(graded) * 100, 1) if graded else None,
+            'elapsed_ms': elapsed, 'avg_ms': round(elapsed / len(rows)) if rows else 0,
+            'unique': len({r['question_id'] for r in rows})}
+
 
 def statistics(filters):
-    clause,args=where(filters); extra=[]
-    today=datetime.now(TZ).date(); days=max(0,min(3650,int(filters.get('days',7))))
-    if days: extra.append('substr(a.created_at,1,10)>=?'); args.append((today-timedelta(days=days-1)).isoformat())
-    extra.append('substr(a.created_at,1,10)<=?'); args.append(today.isoformat())
-    extra.append("EXISTS(SELECT 1 FROM sessions s WHERE s.id=a.session_id AND (s.mode!='exam' OR s.status='completed'))")
-    if filters.get('attempt')=='first': extra.append('a.is_first=1')
-    if filters.get('mode'): extra.append('a.mode=?'); args.append(filters['mode'])
+    """Summary, today, daily trend and grouped breakdown, all by Beijing calendar day."""
+    clause, args = where(filters)
+    today = datetime.now(TZ).date()
+    days = max(0, min(3650, int(filters.get('days', 7))))
+    extra = []
+    if days:
+        extra.append('substr(a.created_at,1,10)>=?')
+        args.append((today - timedelta(days=days - 1)).isoformat())
+    extra.append('substr(a.created_at,1,10)<=?')
+    args.append(today.isoformat())
+    extra.append(f'EXISTS(SELECT 1 FROM sessions s WHERE s.id=a.session_id AND {COUNTED})')
+    if filters.get('attempt') == 'first':
+        extra.append('a.is_first=1')
+    if filters.get('mode'):
+        extra.append('a.mode=?')
+        args.append(filters['mode'])
     with connect() as c:
-        rows=[dict(r) for r in c.execute(f'SELECT a.*,q.module,q.category,q.topic,q.tags,q.paper_id FROM attempts a JOIN questions q ON q.id=a.question_id WHERE {clause} AND {" AND ".join(extra)}',args)]
-    daily=defaultdict(list); groups=defaultdict(list)
-    group=filters.get('group','module')
-    if group not in ('module','category','topic','tag'): group='module'
+        rows = [dict(r) for r in c.execute(f'''SELECT a.*, q.module, q.category, q.topic, q.tags, q.paper_id
+            FROM attempts a JOIN questions q ON q.id=a.question_id
+            WHERE {clause} AND {" AND ".join(extra)}''', args)]
+    group = filters.get('group', 'module')
+    if group not in ('module', 'category', 'topic', 'tag'):
+        group = 'module'
+    daily, groups = defaultdict(list), defaultdict(list)
     for r in rows:
         daily[r['created_at'][:10]].append(r)
-        for k in json.loads(r['tags']) if group=='tag' else [r[group]]: groups[k].append(r)
-    start=today-timedelta(days=days-1) if days else datetime.fromisoformat(min(daily) if daily else today.isoformat()).date()
-    trend=[]; date=start
-    while date<=today:
-        key=date.isoformat(); trend.append(dict(date=key,**aggregate(daily[key]))); date+=timedelta(days=1)
-    return {'summary':aggregate(rows),'today':aggregate(daily[today.isoformat()]),'trend':trend,
-        'groups':[dict(name=k,last=max(x['created_at'] for x in v),**aggregate(v)) for k,v in groups.items()],
-        'timezone':'Asia/Shanghai','group':group}
+        for key in (json.loads(r['tags']) if group == 'tag' else [r[group]]):
+            groups[key].append(r)
+    if days:
+        start = today - timedelta(days=days - 1)
+    else:
+        start = datetime.fromisoformat(min(daily) if daily else today.isoformat()).date()
+    trend = []
+    date = start
+    while date <= today:
+        key = date.isoformat()
+        trend.append(dict(date=key, **aggregate(daily[key])))
+        date += timedelta(days=1)
+    return {'summary': aggregate(rows), 'today': aggregate(daily[today.isoformat()]), 'trend': trend,
+            'groups': [dict(name=k, last=max(x['created_at'] for x in v), **aggregate(v)) for k, v in groups.items()],
+            'timezone': 'Asia/Shanghai', 'group': group}
